@@ -160,7 +160,7 @@ func TestDeleteBranchesCanBeRestored(t *testing.T) {
 	newTestRepo(t, "old")
 	tip := mustGit(t, "rev-parse", "refs/heads/old")
 
-	results := deleteBranches(branchesNamed(t, "old"))
+	results := deleteBranches(branchesNamed(t, "old"), "main")
 	if results[0].Err != nil {
 		t.Fatal(results[0].Err)
 	}
@@ -224,7 +224,7 @@ func TestLoadBranchesDetectsOtherWorktrees(t *testing.T) {
 	}
 
 	// The protection matches git's own rule: it refuses this delete.
-	if results := deleteBranches(branchesNamed(t, "review")); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "review"), "main"); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch checked out in a worktree")
 	}
 }
@@ -292,7 +292,7 @@ func TestLoadBranchesDetectsRebaseInProgress(t *testing.T) {
 	if feature.InProgress != "rebasing" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked rebasing", feature)
 	}
-	if results := deleteBranches(branchesNamed(t, "feature")); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "feature"), "main"); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch that's being rebased")
 	}
 }
@@ -317,7 +317,7 @@ func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
 	if feature.InProgress != "bisecting" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked bisecting", feature)
 	}
-	if results := deleteBranches(branchesNamed(t, "feature")); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "feature"), "main"); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch that's being bisected")
 	}
 }
@@ -366,7 +366,7 @@ func TestLoadBranchesWithTagNamedLikeBranches(t *testing.T) {
 	if byName["only-in-tag"].Merged {
 		t.Error("only-in-tag is merged into the tag main, not the branch main")
 	}
-	if results := deleteBranches(branchesNamed(t, "v1")); results[0].Err != nil {
+	if results := deleteBranches(branchesNamed(t, "v1"), "main"); results[0].Err != nil {
 		t.Errorf("a branch that shares a tag's name should be deletable: %v", results[0].Err)
 	}
 }
@@ -393,7 +393,7 @@ func TestDeleteBranchNamedLikeAnOption(t *testing.T) {
 			t.Errorf("preview of %q: %v", r.Name, r.Err)
 		}
 	}
-	for _, r := range deleteBranches(branchesNamed(t, "-r", "--all")) {
+	for _, r := range deleteBranches(branchesNamed(t, "-r", "--all"), "main") {
 		if r.Err != nil {
 			t.Errorf("delete of %q: %v", r.Name, r.Err)
 		}
@@ -419,7 +419,7 @@ func TestDeleteBranchesInSeveralBatches(t *testing.T) {
 	}
 	tip := mustGit(t, "rev-parse", "HEAD")
 
-	results := deleteBranches(branchesNamed(t, names...))
+	results := deleteBranches(branchesNamed(t, names...), "main")
 	remaining, err := branchSHAs()
 	if err != nil {
 		t.Fatal(err)
@@ -437,7 +437,7 @@ func TestDeleteBranchesReportsEachFailure(t *testing.T) {
 	branches := branchesNamed(t, "a", "busy", "b")
 	mustGit(t, "branch", "-D", "b") // deleted by someone else after loading
 
-	results := deleteBranches(branches)
+	results := deleteBranches(branches, "main")
 	if results[0].Err != nil || branchExists("a") {
 		t.Errorf("a: %+v, want deleted", results[0])
 	}
@@ -446,5 +446,41 @@ func TestDeleteBranchesReportsEachFailure(t *testing.T) {
 	}
 	if results[2].Err == nil || !strings.Contains(results[2].Err.Error(), "no longer exists") {
 		t.Errorf("b: err = %v, want 'no longer exists'", results[2].Err)
+	}
+}
+
+func TestDeleteSkipsBranchThatChangedSinceLoading(t *testing.T) {
+	newTestRepo(t, "feature")
+	loaded := branchesNamed(t, "feature")
+	// Someone commits to the branch after the list was loaded.
+	mustGit(t, "switch", "-q", "feature")
+	commitFile(t, ".", "new work")
+	mustGit(t, "switch", "-q", "main")
+
+	results := deleteBranches(loaded, "main")
+	if results[0].Err == nil || !strings.Contains(results[0].Err.Error(), "changed since") {
+		t.Errorf("err = %v, want a 'changed since' refusal", results[0].Err)
+	}
+	if !branchExists("feature") {
+		t.Fatal("a branch with commits the user hasn't seen must not be deleted")
+	}
+}
+
+func TestDeleteSkipsBranchNoLongerMerged(t *testing.T) {
+	newTestRepo(t)
+	commitFile(t, ".", "second")
+	mustGit(t, "branch", "done") // merged: points at main's tip
+	loaded := branchesNamed(t, "done")
+	if !loaded[0].Merged {
+		t.Fatal("test setup: done should start out merged")
+	}
+	mustGit(t, "reset", "-q", "--hard", "HEAD~1") // main drops the commit
+
+	results := deleteBranches(loaded, "main")
+	if results[0].Err == nil || !strings.Contains(results[0].Err.Error(), "no longer merged") {
+		t.Errorf("err = %v, want a 'no longer merged' refusal", results[0].Err)
+	}
+	if !branchExists("done") {
+		t.Fatal("a branch that stopped being merged must not be deleted without a warning")
 	}
 }

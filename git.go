@@ -160,13 +160,9 @@ func loadBranches() (base string, branches []Branch, err error) {
 		return "", branches, nil
 	}
 
-	merged, err := git("branch", "--merged", "refs/heads/"+base, "--format=%(refname:lstrip=2)")
+	isMerged, err := mergedInto(base)
 	if err != nil {
 		return "", nil, err
-	}
-	isMerged := make(map[string]bool)
-	for name := range strings.SplitSeq(merged, "\n") {
-		isMerged[strings.TrimSpace(name)] = true
 	}
 	for i := range branches {
 		branches[i].Merged = isMerged[branches[i].Name]
@@ -180,6 +176,19 @@ func loadBranches() (base string, branches []Branch, err error) {
 		branches[i].InProgress = inProgress[branches[i].Name]
 	}
 	return base, branches, nil
+}
+
+// mergedInto returns the set of local branches fully merged into base.
+func mergedInto(base string) (map[string]bool, error) {
+	out, err := git("branch", "--merged", "refs/heads/"+base, "--format=%(refname:lstrip=2)")
+	if err != nil {
+		return nil, err
+	}
+	merged := make(map[string]bool)
+	for name := range strings.SplitSeq(out, "\n") {
+		merged[strings.TrimSpace(name)] = true
+	}
+	return merged, nil
 }
 
 // branchesInProgress finds branches that a rebase or bisect has taken over in
@@ -265,18 +274,38 @@ const deleteBatchSize = 200
 // checks against HEAD rather than the base branch, and the UI has already
 // warned about unmerged branches on the confirm screen.
 //
+// That warning was based on the branches as loaded, possibly minutes ago, so
+// a branch is skipped if it has changed since: if it now points at a
+// different commit, or was merged into base and no longer is.
+//
 // For speed, it reads every branch's commit once, deletes in batches (one git
 // process per branch is ~25x slower), then reads again to see what's gone.
 // Commits come from git directly rather than from its "Deleted branch x (was
 // abc1234)." message, which is translated in some languages.
-func deleteBranches(branches []Branch) []deleteResult {
+func deleteBranches(branches []Branch, base string) []deleteResult {
 	before, err := branchSHAs()
 	if err != nil {
 		return failAll(branches, err)
 	}
+	var merged map[string]bool
+	if base != "" {
+		if merged, err = mergedInto(base); err != nil {
+			return failAll(branches, err)
+		}
+	}
+
+	skipped := make(map[string]error)
 	var names []string
 	for _, b := range branches {
-		if _, ok := before[b.Name]; ok {
+		sha, exists := before[b.Name]
+		switch {
+		case !exists:
+			skipped[b.Name] = fmt.Errorf("branch %s no longer exists", b.Name)
+		case sha != b.SHA:
+			skipped[b.Name] = fmt.Errorf("skipped %s: it changed since you selected it", b.Name)
+		case b.Merged && merged != nil && !merged[b.Name]:
+			skipped[b.Name] = fmt.Errorf("skipped %s: it's no longer merged into %s", b.Name, base)
+		default:
 			names = append(names, b.Name)
 		}
 	}
@@ -286,19 +315,20 @@ func deleteBranches(branches []Branch) []deleteResult {
 		// a name like "-r" isn't read as a flag.
 		git(append([]string{"branch", "-D", "--"}, batch...)...)
 	}
-	after, err := branchSHAs()
-	if err != nil {
-		return failAll(branches, fmt.Errorf("couldn't check what was deleted: %w", err))
-	}
+	// If this read fails, every attempted branch counts as deleted (after is
+	// nil): keeping its SHA keeps its restore command, and running that for a
+	// branch that survived is harmless (git says it already exists).
+	after, _ := branchSHAs()
 
 	results := make([]deleteResult, 0, len(branches))
 	for _, b := range branches {
-		sha, existed := before[b.Name]
+		if err, ok := skipped[b.Name]; ok {
+			results = append(results, deleteResult{Name: b.Name, Err: err})
+			continue
+		}
+		sha := before[b.Name]
 		var err error
-		switch _, remains := after[b.Name]; {
-		case !existed:
-			err = fmt.Errorf("branch %s no longer exists", b.Name)
-		case remains:
+		if _, remains := after[b.Name]; remains {
 			// Git refused (in a worktree, say). Try once more on its own to
 			// get git's reason for this branch.
 			_, err = git("branch", "-D", "--", b.Name)

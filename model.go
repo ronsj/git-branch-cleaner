@@ -132,12 +132,12 @@ func loadBranchesCmd() tea.Msg {
 	return branchesLoadedMsg{base, branches}
 }
 
-func deleteBranchesCmd(branches []Branch, dryRun bool) tea.Cmd {
+func deleteBranchesCmd(branches []Branch, base string, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
 			return branchesDeletedMsg{previewDeletes(branches)}
 		}
-		return branchesDeletedMsg{deleteBranches(branches)}
+		return branchesDeletedMsg{deleteBranches(branches, base)}
 	}
 }
 
@@ -316,7 +316,7 @@ func (m model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		selected := m.selectedBranches()
 		clear(m.selected)
 		m.state = stateDeleting
-		return m, tea.Batch(deleteBranchesCmd(selected, m.dryRun), m.spinner.Tick)
+		return m, tea.Batch(deleteBranchesCmd(selected, m.base, m.dryRun), m.spinner.Tick)
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateBrowsing
 	}
