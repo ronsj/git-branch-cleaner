@@ -12,6 +12,7 @@ type Branch struct {
 	Current    bool      // checked out right now
 	Worktree   string    // path of the worktree that has it checked out, if any
 	InProgress string    // "rebasing" or "bisecting" if a worktree is doing that to it
+	Upstream   string    // full ref of the branch it tracks, if any
 	Gone       bool      // upstream was deleted on the remote (often a squash-merged PR)
 	Merged     bool      // fully merged into the base branch
 	Author     string    // author of the last commit
@@ -24,7 +25,13 @@ func (b Branch) InOtherWorktree() bool {
 	return b.Worktree != "" && !b.Current
 }
 
+// IsBase reports whether this is the base branch or, when the base is a
+// remote-tracking branch like origin/main, the local branch that tracks it.
+func (b Branch) IsBase(base string) bool {
+	return base != "" && (b.Name == base || b.Upstream == "refs/remotes/"+base)
+}
+
 // Protected reports whether the UI should refuse to delete this branch.
 func (b Branch) Protected(base string) bool {
-	return b.Current || b.Name == base || b.InOtherWorktree() || b.InProgress != ""
+	return b.Current || b.IsBase(base) || b.InOtherWorktree() || b.InProgress != ""
 }

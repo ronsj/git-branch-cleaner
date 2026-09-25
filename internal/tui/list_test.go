@@ -38,3 +38,13 @@ func TestMergedShownOnProtectedBranches(t *testing.T) {
 		t.Errorf("the base branch shouldn't be labeled merged: %q", tags)
 	}
 }
+
+// With --base origin/main, the local main that tracks it is the base.
+func TestBaseTagOnBranchTrackingRemoteBase(t *testing.T) {
+	next, _ := New(Options{}).Update(branchesLoadedMsg{base: "origin/main"})
+	m := next.(Model)
+	main := git.Branch{Name: "main", Merged: true, Upstream: "refs/remotes/origin/main"}
+	if tags := m.renderTags(main); !strings.Contains(tags, "base") || strings.Contains(tags, "merged") {
+		t.Errorf("tags = %q, want base and not merged", tags)
+	}
+}

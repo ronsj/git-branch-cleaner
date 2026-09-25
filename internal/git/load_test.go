@@ -13,10 +13,10 @@ import (
 )
 
 // row places one branch's field values at their positions in a record.
-func row(name, unixDate, head, upstreamTrack, worktree, author, subject, sha string) []string {
+func row(name, unixDate, head, upstream, upstreamTrack, worktree, author, subject, sha string) []string {
 	var f [numFields]string
 	f[fieldName], f[fieldUnixDate] = name, unixDate
-	f[fieldHead], f[fieldUpstreamTrack], f[fieldWorktree] = head, upstreamTrack, worktree
+	f[fieldHead], f[fieldUpstream], f[fieldUpstreamTrack], f[fieldWorktree] = head, upstream, upstreamTrack, worktree
 	f[fieldAuthor], f[fieldSubject], f[fieldSHA] = author, subject, sha
 	return f[:]
 }
@@ -33,19 +33,19 @@ func forEachRefOutput(rows ...[]string) string {
 
 func TestParseBranches(t *testing.T) {
 	out := forEachRefOutput(
-		row("old-feature", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"),
-		row("main", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"),
-		row("wip", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
-		row("empty-subject", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"),
-		row("bad-time", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"),
+		row("old-feature", "1750000000", " ", "refs/remotes/origin/old-feature", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"),
+		row("main", "1757000000", "*", "refs/remotes/origin/main", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"),
+		row("wip", "1757100000", " ", "", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
+		row("empty-subject", "1720000000", " ", "", "", "", "Alex Kim", "", "dddd444"),
+		row("bad-time", "not-a-number", " ", "", "", "", "Alex Kim", "", "eeee555"),
 		// A terminal would act on these instead of showing them.
-		row("escapes", "1720000000", " ", "", "", "\x1b[31mMallory", "Fix\r\x1b]8;;https://evil.example\x07link\u009b2J", "ffff666"),
+		row("escapes", "1720000000", " ", "", "", "", "\x1b[31mMallory", "Fix\r\x1b]8;;https://evil.example\x07link\u009b2J", "ffff666"),
 	)
 
 	got := parseBranches(out)
 	want := []Branch{
-		{Name: "old-feature", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
-		{Name: "main", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
+		{Name: "old-feature", CommitTime: time.Unix(1750000000, 0), Upstream: "refs/remotes/origin/old-feature", Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
+		{Name: "main", CommitTime: time.Unix(1757000000, 0), Current: true, Upstream: "refs/remotes/origin/main", Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
 		{Name: "wip", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs in subject", SHA: "cccc333"},
 		{Name: "empty-subject", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim", SHA: "dddd444"},
 		{Name: "bad-time", CommitTime: time.Unix(0, 0), Author: "Alex Kim", SHA: "eeee555"},
@@ -66,7 +66,7 @@ func TestEveryBranchFieldHasAFormat(t *testing.T) {
 }
 
 func TestParseBranchesWithTrailingNewline(t *testing.T) {
-	out := forEachRefOutput(row("a", "1", " ", "", "", "Sam", "", "ffff666")) + "\n"
+	out := forEachRefOutput(row("a", "1", " ", "", "", "", "Sam", "", "ffff666")) + "\n"
 	if got := parseBranches(out); len(got) != 1 || got[0].Name != "a" {
 		t.Errorf("parseBranches = %+v, want the one branch", got)
 	}
@@ -225,5 +225,39 @@ func TestLoadBranchesWithBaseOverride(t *testing.T) {
 
 	if _, _, err := LoadBranches("no-such-branch"); err == nil || !strings.Contains(err.Error(), "doesn't exist") {
 		t.Errorf("err = %v, want a 'doesn't exist' error", err)
+	}
+}
+
+// Local main is often behind origin/main, so --base origin/main sees merges
+// the local main doesn't have yet. Local main, which tracks it, is the base.
+func TestLoadBranchesWithRemoteTrackingBase(t *testing.T) {
+	testrepo.New(t)
+	testrepo.Git(t, "remote", "add", "origin", t.TempDir())
+	testrepo.Git(t, "switch", "-q", "-c", "feature")
+	testrepo.CommitFile(t, ".", "feature work")
+	// origin/main has merged feature; local main hasn't pulled it yet.
+	testrepo.Git(t, "update-ref", "refs/remotes/origin/main", "HEAD")
+	testrepo.Git(t, "switch", "-q", "main")
+	testrepo.Git(t, "branch", "-q", "--set-upstream-to=origin/main")
+
+	base, branches, err := LoadBranches("origin/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base != "origin/main" {
+		t.Errorf("base = %q, want origin/main", base)
+	}
+	byName := make(map[string]Branch)
+	for _, b := range branches {
+		byName[b.Name] = b
+	}
+	if !byName["feature"].Merged {
+		t.Error("feature is merged into origin/main")
+	}
+	if main := byName["main"]; !main.IsBase(base) || !main.Protected(base) {
+		t.Errorf("main = %+v, want it treated as the base, since it tracks origin/main", main)
+	}
+	if loadBranch(t, "feature").Merged {
+		t.Error("without --base, feature isn't merged into local main")
 	}
 }

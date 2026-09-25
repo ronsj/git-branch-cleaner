@@ -13,6 +13,7 @@ const (
 	fieldName = iota
 	fieldUnixDate
 	fieldHead
+	fieldUpstream
 	fieldUpstreamTrack
 	fieldWorktree
 	fieldAuthor
@@ -32,6 +33,7 @@ var branchFields = [numFields]string{
 	fieldName:          "%(refname:lstrip=2)",
 	fieldUnixDate:      "%(committerdate:unix)",
 	fieldHead:          "%(HEAD)",
+	fieldUpstream:      "%(upstream)",
 	fieldUpstreamTrack: "%(upstream:track)",
 	fieldWorktree:      "%(worktreepath)",
 	fieldAuthor:        "%(authorname)",
@@ -66,6 +68,7 @@ func parseBranches(out string) []Branch {
 			SHA:        fields[fieldSHA],
 			CommitTime: time.Unix(unix, 0),
 			Current:    fields[fieldHead] == "*",
+			Upstream:   fields[fieldUpstream],
 			Gone:       fields[fieldUpstreamTrack] == "[gone]",
 			Worktree:   fields[fieldWorktree],
 			Author:     printable(fields[fieldAuthor]),
@@ -112,6 +115,8 @@ func baseBranch() string {
 
 // LoadBranches lists local branches and marks which are merged into the base
 // branch: baseOverride if set (--base), otherwise a guess (see baseBranch).
+// baseOverride can name a local branch or a remote-tracking one, such as
+// origin/main, which is often ahead of the local main.
 // The UI decides the order.
 func LoadBranches(baseOverride string) (base string, branches []Branch, err error) {
 	out, err := git("for-each-ref", "--format="+branchFormat, "refs/heads/")
@@ -120,10 +125,12 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 	}
 	branches = parseBranches(out)
 
+	var baseRef string
 	if baseOverride == "" {
 		base = baseBranch()
-	} else if !branchExists(baseOverride) {
-		return "", nil, fmt.Errorf("base branch %q doesn't exist", baseOverride)
+		baseRef = "refs/heads/" + base
+	} else if baseRef = resolveBase(baseOverride); baseRef == "" {
+		return "", nil, fmt.Errorf("base branch %q doesn't exist, locally or as a remote-tracking branch", baseOverride)
 	} else {
 		base = baseOverride
 	}
@@ -131,7 +138,7 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 	// merged, but rebases and bisects still need to be found: a rebase is
 	// exactly what detaches HEAD.
 	if base != "" {
-		isMerged, err := mergedInto(base)
+		isMerged, err := mergedInto(baseRef)
 		if err != nil {
 			return "", nil, err
 		}
@@ -150,9 +157,20 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 	return base, branches, nil
 }
 
-// mergedInto returns the set of local branches fully merged into base.
-func mergedInto(base string) (map[string]bool, error) {
-	out, err := git("branch", "--merged", "refs/heads/"+base, "--format=%(refname:lstrip=2)")
+// resolveBase returns the full ref for a --base name: the local branch if
+// there is one, otherwise the remote-tracking branch, otherwise "".
+func resolveBase(name string) string {
+	for _, ref := range []string{"refs/heads/" + name, "refs/remotes/" + name} {
+		if _, err := git("rev-parse", "--verify", "--quiet", ref); err == nil {
+			return ref
+		}
+	}
+	return ""
+}
+
+// mergedInto returns the set of local branches fully merged into baseRef.
+func mergedInto(baseRef string) (map[string]bool, error) {
+	out, err := git("branch", "--merged", baseRef, "--format=%(refname:lstrip=2)")
 	if err != nil {
 		return nil, err
 	}
