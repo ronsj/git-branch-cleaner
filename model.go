@@ -403,17 +403,15 @@ func indexOf(branches []Branch, name string) int {
 	return -1
 }
 
-// listHeight is how many branch rows fit on screen; the rest is header,
-// footer, and help.
+// listHeight is how many branch rows fit on screen: the terminal height
+// minus the header, the footer (measured, not assumed), and the two
+// "↑/↓ N more" lines.
 func (m model) listHeight() int {
 	if m.height == 0 {
 		return len(m.visibleBranches()) // size unknown yet: show everything
 	}
-	chrome := 8 + len(m.resultLines())
-	if m.help.ShowAll {
-		chrome += 3
-	}
-	return max(m.height-chrome, 3)
+	const headerLines, scrollMarkers = 2, 2
+	return max(m.height-headerLines-scrollMarkers-lipgloss.Height(m.renderFooter()), 3)
 }
 
 // scrollToCursor adjusts offset so the cursor row stays visible.
@@ -482,13 +480,19 @@ func (m model) render() string {
 		s.WriteString(m.renderList())
 	}
 
+	s.WriteString(m.renderFooter())
+	return s.String()
+}
+
+// renderFooter is everything below the list: the last delete's results, the
+// selection count, and the key help.
+func (m model) renderFooter() string {
+	var s strings.Builder
 	s.WriteString("\n")
 	for _, line := range m.resultLines() {
 		s.WriteString(line + "\n")
 	}
-
 	s.WriteString(m.renderSelectionCount() + "\n")
-
 	if m.filter.Focused() {
 		s.WriteString(mutedStyle.Render("type to filter • ↑/↓ move • enter done • esc clear"))
 	} else {

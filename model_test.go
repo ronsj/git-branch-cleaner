@@ -501,3 +501,25 @@ func TestManyResultsFitTheScreen(t *testing.T) {
 		t.Error("expected a note that the rest are listed on exit")
 	}
 }
+
+func TestListFillsScreenExactly(t *testing.T) {
+	var branches []Branch
+	for i := range 60 {
+		branches = append(branches, Branch{Name: fmt.Sprintf("b-%02d", i), CommitTime: daysAgo(100 - i)})
+	}
+	next, _ := newModel(options{}).Update(branchesLoadedMsg{base: "main", branches: branches})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
+	m := next.(model)
+	for range 30 {
+		m = press(m, "j") // mid-list, so both "more" markers show
+	}
+
+	for _, fullHelp := range []bool{false, true} {
+		if fullHelp {
+			m = press(m, "?")
+		}
+		if h := lipgloss.Height(m.render()); h != 20 {
+			t.Errorf("full help %v: screen is %d lines, want exactly the terminal's 20", fullHelp, h)
+		}
+	}
+}
