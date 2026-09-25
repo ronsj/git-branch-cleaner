@@ -15,15 +15,22 @@ type Branch struct {
 	LastCommit string    // relative date for display, e.g. "3 weeks ago"
 	CommitTime time.Time // exact date, for sorting and age checks
 	Current    bool      // checked out right now
+	Worktree   string    // path of the worktree that has it checked out, if any
 	Gone       bool      // upstream was deleted on the remote (often a squash-merged PR)
 	Merged     bool      // fully merged into the base branch
 	Author     string    // author of the last commit
 	Subject    string    // first line of the last commit message
 }
 
+// InOtherWorktree reports whether the branch is checked out in a worktree
+// other than this one. Git refuses to delete those.
+func (b Branch) InOtherWorktree() bool {
+	return b.Worktree != "" && !b.Current
+}
+
 // Protected reports whether the UI should refuse to delete this branch.
 func (b Branch) Protected(base string) bool {
-	return b.Current || b.Name == base
+	return b.Current || b.Name == base || b.InOtherWorktree()
 }
 
 // deleteResult records the outcome of deleting one branch. Git prints
@@ -57,9 +64,9 @@ func git(args ...string) (string, error) {
 // The fields are tab-separated (%09) so branch names never collide with the
 // separator. The commit subject goes last because it's free text: splitting
 // into at most branchFields parts keeps any tabs inside it intact.
-const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(HEAD)%09%(upstream:track)%09%(authorname)%09%(contents:subject)"
+const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(HEAD)%09%(upstream:track)%09%(worktreepath)%09%(authorname)%09%(contents:subject)"
 
-const branchFields = 7
+const branchFields = 8
 
 // parseBranches turns `git for-each-ref --format=branchFormat` output into Branches.
 func parseBranches(out string) []Branch {
@@ -81,8 +88,9 @@ func parseBranches(out string) []Branch {
 			CommitTime: time.Unix(unix, 0),
 			Current:    fields[3] == "*",
 			Gone:       fields[4] == "[gone]",
-			Author:     fields[5],
-			Subject:    fields[6],
+			Worktree:   fields[5],
+			Author:     fields[6],
+			Subject:    fields[7],
 		})
 	}
 	return branches

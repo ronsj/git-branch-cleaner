@@ -175,9 +175,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.base = msg.base
 		m.branches = sortBranches(msg.branches, m.sortBy)
 		m.err = nil
-		// Drop selections for branches that no longer exist.
+		// Drop selections for branches that no longer exist or have become
+		// protected, e.g. checked out in another worktree since the last load.
 		for name := range m.selected {
-			if indexOf(m.branches, name) < 0 {
+			if i := indexOf(m.branches, name); i < 0 || m.branches[i].Protected(m.base) {
 				delete(m.selected, name)
 			}
 		}
@@ -611,6 +612,9 @@ func (m model) renderTags(b Branch) string {
 	}
 	if b.Name == m.base {
 		tags = append(tags, mutedStyle.Render("base"))
+	}
+	if b.InOtherWorktree() {
+		tags = append(tags, mutedStyle.Render("worktree"))
 	}
 	if b.Merged && !b.Protected(m.base) {
 		tags = append(tags, mergedStyle.Render("merged"))

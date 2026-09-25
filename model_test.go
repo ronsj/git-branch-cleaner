@@ -373,3 +373,43 @@ func TestOlderThanHidingEverything(t *testing.T) {
 		t.Errorf("expected an explanation when every branch is hidden:\n%s", screen)
 	}
 }
+
+func TestWorktreeBranchesCannotBeSelected(t *testing.T) {
+	branches := testBranches()
+	branches[1].Worktree = "/work/review" // merged-feature, checked out elsewhere
+	next, _ := newModel(options{}).Update(branchesLoadedMsg{base: "main", branches: branches})
+	m := press(next.(model), "a")
+
+	if m.selected["merged-feature"] {
+		t.Error("a should skip branches checked out in another worktree")
+	}
+	m = press(m, "j", "space")
+	if m.selected["merged-feature"] {
+		t.Error("space should not select a branch checked out in another worktree")
+	}
+}
+
+func TestReloadDropsSelectionsThatBecameProtected(t *testing.T) {
+	m := press(loadedModel(), "a") // selects merged-feature and gone-feature
+
+	branches := testBranches()
+	branches[1].Worktree = "/work/review" // merged-feature got checked out elsewhere
+	next, _ := m.Update(branchesLoadedMsg{base: "main", branches: branches})
+
+	want := []string{"gone-feature"}
+	if got := next.(model).selectedNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected %v after reload, want %v", got, want)
+	}
+}
+
+func TestWorktreeTag(t *testing.T) {
+	m := loadedModel()
+	b := Branch{Name: "review", Worktree: "/work/review"}
+	if tags := m.renderTags(b); !strings.Contains(tags, "worktree") {
+		t.Errorf("tags = %q, want a worktree label", tags)
+	}
+	current := Branch{Name: "wip", Current: true, Worktree: "/work/app"}
+	if tags := m.renderTags(current); strings.Contains(tags, "worktree") {
+		t.Errorf("the current branch's own worktree shouldn't be labeled: %q", tags)
+	}
+}

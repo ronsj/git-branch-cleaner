@@ -5,7 +5,7 @@ set -euo pipefail
 
 dir="${1:-/tmp/branch-cleaner-demo}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
-rm -rf "$dir" "$dir-remote.git"
+rm -rf "$dir" "$dir-remote.git" "$dir-release"
 git init -q --bare "$dir-remote.git"
 git init -q -b main "$dir"
 cd "$dir"
@@ -52,6 +52,12 @@ merge 70 feature/login
 git switch -qc chore/deps main
 commit 45 "Bump dependencies" "Alex Kim"
 merge 44 chore/deps
+
+# Merged, but checked out in a second worktree, so it can't be deleted.
+git switch -qc release/2026-08 main
+commit 30 "Prepare August release notes" "Sam Lee"
+merge 29 release/2026-08
+git worktree add -q "$dir-release" release/2026-08
 
 # Pushed, then deleted on the remote (like a squash-merged PR) -> "gone".
 git switch -qc fix/header-typo main

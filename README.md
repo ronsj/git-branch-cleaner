@@ -50,11 +50,11 @@ If you've set `GOBIN`, `go install` put the binary there instead:
 rm "$(go env GOBIN)/branch-cleaner"
 ```
 
-If you created the [demo repo](#try-it-on-a-demo-repo), remove it and its
-fake remote:
+If you created the [demo repo](#try-it-on-a-demo-repo), remove it, its fake
+remote, and its extra worktree:
 
 ```sh
-rm -rf /tmp/branch-cleaner-demo /tmp/branch-cleaner-demo-remote.git
+rm -rf /tmp/branch-cleaner-demo /tmp/branch-cleaner-demo-remote.git /tmp/branch-cleaner-demo-release
 ```
 
 ## Usage
@@ -130,6 +130,7 @@ lists every selected branch, hidden or not.
 | `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches show up this way, because git doesn't see their commits in the base branch. |
 | `current` | The branch you have checked out. It can't be selected. |
 | `base` | The branch everything is compared against. It can't be selected. |
+| `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it there, so it can't be selected. |
 
 The base branch is the remote's default branch (`origin/HEAD`) if it exists
 locally, otherwise `main`, then `master`, then whatever is checked out.
@@ -157,7 +158,7 @@ Run the restore command to bring a branch back. If you've lost the output,
 ## Try it on a demo repo
 
 To try branch-cleaner without touching real work, use `--dry-run` or create
-a throwaway repo with merged, gone, and unmerged branches:
+a throwaway repo with merged, gone, unmerged, and worktree branches:
 
 ```sh
 go build -o branch-cleaner .
