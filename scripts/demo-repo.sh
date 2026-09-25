@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Creates a throwaway git repo with a mix of branches to try git-branch-cleaner on.
-# Usage: scripts/demo-repo.sh [dir]   (default: /tmp/branch-cleaner-demo)
+# Usage: scripts/demo-repo.sh [dir]   (default: /tmp/git-branch-cleaner-demo)
 set -euo pipefail
 
-dir="${1:-/tmp/branch-cleaner-demo}"
+dir="${1:-/tmp/git-branch-cleaner-demo}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Everything goes inside $dir: the repo, a bare "remote", and a second
 # worktree. The marker file shows a folder was made by this script, so it's
 # the only kind of folder (besides an empty one) the script will replace.
-marker=".branch-cleaner-demo"
+marker=".git-branch-cleaner-demo"
 if [ -e "$dir" ] && [ ! -f "$dir/$marker" ]; then
   if [ ! -d "$dir" ] || [ -n "$(ls -A "$dir")" ]; then
     echo "error: $dir already exists and wasn't made by this script; refusing to replace it." >&2

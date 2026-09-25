@@ -126,7 +126,7 @@ func (m model) resultLines() []string {
 // renderHeader is the title line: app name, dry-run badge, base branch,
 // sort order, and how many branches --older-than is hiding.
 func (m model) renderHeader() string {
-	header := titleStyle.Render("Branch Cleaner")
+	header := titleStyle.Render("Git Branch Cleaner")
 	if m.dryRun {
 		header += dryRunStyle.Render("  DRY RUN")
 	}

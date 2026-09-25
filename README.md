@@ -6,7 +6,7 @@ A terminal UI for finding and deleting stale local git branches, built with
 [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 ```
-Branch Cleaner  base: main · oldest first
+Git Branch Cleaner  base: main · oldest first
 
   [x] chore/deps          3 weeks ago    merged        Alex Kim         Bump dependencies
 > [ ] experiment/new-nav  2 weeks ago                  Priya Natarajan  Try a sidebar layout for th…
@@ -52,7 +52,7 @@ rm "$(go env GOBIN)/git-branch-cleaner"
 If you created the [demo repo](#try-it-on-a-demo-repo), remove its folder:
 
 ```sh
-rm -rf /tmp/branch-cleaner-demo
+rm -rf /tmp/git-branch-cleaner-demo
 ```
 
 ## Usage
@@ -65,7 +65,9 @@ git-branch-cleaner
 ```
 
 Git runs any `git-<name>` program on your `PATH` as a subcommand, so
-`git branch-cleaner` works too.
+`git branch-cleaner` works too. For help, use `-h`: git turns
+`git branch-cleaner --help` into a request for a man page, which this tool
+doesn't install.
 
 Branches are listed oldest first, so the stalest ones are at the top; press
 `s` to switch to newest first or by name. Each row shows the branch's last
@@ -167,8 +169,8 @@ a throwaway repo with merged, gone, unmerged, and worktree branches:
 
 ```sh
 go build .
-scripts/demo-repo.sh                  # defaults to /tmp/branch-cleaner-demo
-cd /tmp/branch-cleaner-demo/repo && ~/path/to/git-branch-cleaner
+scripts/demo-repo.sh                  # defaults to /tmp/git-branch-cleaner-demo
+cd /tmp/git-branch-cleaner-demo/repo && ~/path/to/git-branch-cleaner
 ```
 
 The folder holds the repo (`repo/`), a fake remote (`remote.git/`), and a
