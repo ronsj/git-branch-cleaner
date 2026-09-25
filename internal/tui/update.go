@@ -37,15 +37,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if b, ok := m.cursorBranch(); ok {
 			cursorName = b.Name
 		}
+		selectedAt := make(map[string]string) // name -> commit when selected
+		for _, b := range m.selectedBranches() {
+			selectedAt[b.Name] = b.SHA
+		}
 		m.state = stateBrowsing
 		m.base = msg.base
 		m.branches = sortBranches(msg.branches, m.sortBy)
 		m.err = nil
-		// Keep only selections that still exist and aren't protected, e.g.
-		// checked out in another worktree since the last load.
+		// Keep only selections that still exist at the same commit and are
+		// still allowed: not protected (e.g. checked out in another worktree
+		// since the last load) and not hidden by --older-than. A branch with
+		// new commits is deselected, so it can't be deleted along with
+		// commits the user never saw.
 		stillSelected := make(map[string]bool)
 		for _, b := range m.branches {
-			if m.selected[b.Name] && !b.Protected(m.base) {
+			if sha, ok := selectedAt[b.Name]; ok && sha == b.SHA && !b.Protected(m.base) && !m.tooRecent(b) {
 				stillSelected[b.Name] = true
 			}
 		}
