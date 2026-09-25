@@ -100,8 +100,9 @@ func TestListFillsScreenExactly(t *testing.T) {
 		if fullHelp {
 			m = press(m, "?")
 		}
-		if h := lipgloss.Height(m.render()); h != 20 {
-			t.Errorf("full help %v: screen is %d lines, want exactly the terminal's 20", fullHelp, h)
+		// Branches take linesPerBranch lines each, so a line can be left over.
+		if h := lipgloss.Height(m.render()); h > 20 || h <= 20-linesPerBranch {
+			t.Errorf("full help %v: screen is %d lines, want to fill the terminal's 20", fullHelp, h)
 		}
 	}
 }
