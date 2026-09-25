@@ -248,7 +248,8 @@ func previewDeletes(names []string) []deleteResult {
 func deleteBranches(names []string) []deleteResult {
 	results := make([]deleteResult, 0, len(names))
 	for _, name := range names {
-		out, err := git("branch", "-D", name)
+		// "--" ends the options, so a name like "-r" isn't read as a flag.
+		out, err := git("branch", "-D", "--", name)
 		results = append(results, deleteResult{Name: name, Output: out, Err: err})
 	}
 	return results

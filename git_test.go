@@ -353,3 +353,25 @@ func TestBaseBranchFromOriginHeadWhenAmbiguous(t *testing.T) {
 		t.Errorf("baseBranch = %q, want trunk (origin's default branch)", got)
 	}
 }
+
+func TestDeleteBranchNamedLikeAnOption(t *testing.T) {
+	newTestRepo(t)
+	// git branch refuses names starting with "-", but plumbing can create them.
+	for _, name := range []string{"-r", "--all"} {
+		mustGit(t, "update-ref", "refs/heads/"+name, "HEAD")
+	}
+
+	for _, r := range previewDeletes([]string{"-r", "--all"}) {
+		if r.Err != nil {
+			t.Errorf("preview of %q: %v", r.Name, r.Err)
+		}
+	}
+	for _, r := range deleteBranches([]string{"-r", "--all"}) {
+		if r.Err != nil {
+			t.Errorf("delete of %q: %v", r.Name, r.Err)
+		}
+		if branchExists(r.Name) {
+			t.Errorf("%q should be deleted", r.Name)
+		}
+	}
+}
