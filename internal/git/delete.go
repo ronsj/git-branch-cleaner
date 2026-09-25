@@ -77,14 +77,8 @@ func recheck(branches []Branch, base string) (ready map[string]string, skipped m
 			skipped[b.Name] = errors.New("it changed since you selected it")
 		case b.Merged && !c.Merged:
 			skipped[b.Name] = fmt.Errorf("it's no longer merged into %s", base)
-		case c.IsBase(base):
-			skipped[b.Name] = errors.New("it's the base branch")
-		case c.Current:
-			skipped[b.Name] = errors.New("it's checked out")
-		case c.InOtherWorktree():
-			skipped[b.Name] = errors.New("it's checked out in another worktree")
-		case c.InProgress != "":
-			skipped[b.Name] = fmt.Errorf("it's in use (%s)", c.InProgress)
+		case c.Protected(base):
+			skipped[b.Name] = errors.New(c.ProtectedReason(base))
 		default:
 			ready[b.Name] = c.SHA
 		}
