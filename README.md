@@ -1,9 +1,6 @@
 # git-branch-cleaner
 
-A terminal UI for finding and deleting stale local git branches, built with
-[Bubble Tea](https://github.com/charmbracelet/bubbletea),
-[Bubbles](https://github.com/charmbracelet/bubbles), and
-[Lip Gloss](https://github.com/charmbracelet/lipgloss).
+A terminal UI for finding and deleting stale local git branches.
 
 ```
 Git Branch Cleaner  base: main · oldest first
