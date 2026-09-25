@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
 // listHeight is how many branch rows fit on screen: the terminal height
@@ -247,7 +248,7 @@ func (m model) renderList() string {
 }
 
 // renderTags returns the colored status labels for a branch, e.g. "merged gone".
-func (m model) renderTags(b Branch) string {
+func (m model) renderTags(b git.Branch) string {
 	var tags []string
 	if b.Current {
 		tags = append(tags, mutedStyle.Render("current"))

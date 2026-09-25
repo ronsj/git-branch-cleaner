@@ -9,6 +9,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/ronsj/git-branch-cleaner/internal/git"
+	"github.com/ronsj/git-branch-cleaner/internal/testrepo"
 )
 
 // Update is a pure function of (model, msg), so it can be tested like a reducer.
@@ -18,8 +20,8 @@ func daysAgo(n int) time.Time {
 }
 
 // testBranches are listed oldest first, which is the default sort order.
-func testBranches() []Branch {
-	return []Branch{
+func testBranches() []git.Branch {
+	return []git.Branch{
 		{Name: "main", Merged: true, CommitTime: daysAgo(90)},
 		{Name: "merged-feature", Merged: true, CommitTime: daysAgo(60)},
 		{Name: "gone-feature", Gone: true, CommitTime: daysAgo(40)},
@@ -102,7 +104,7 @@ func TestCursorFollowsBranchAfterReload(t *testing.T) {
 	m := press(loadedModel(), "j", "j", "j", "j") // on "experiment"
 	next, _ := m.Update(branchesLoadedMsg{
 		base:     "main",
-		branches: []Branch{{Name: "main"}, {Name: "wip", Current: true}, {Name: "experiment"}},
+		branches: []git.Branch{{Name: "main"}, {Name: "wip", Current: true}, {Name: "experiment"}},
 	})
 	m = next.(model)
 	if got := m.branches[m.cursor].Name; got != "experiment" {
@@ -265,9 +267,9 @@ func confirmDelete(t *testing.T, dryRun bool, name string) branchesDeletedMsg {
 }
 
 func TestDryRunConfirmKeepsBranch(t *testing.T) {
-	newTestRepo(t, "old")
+	testrepo.New(t, "old")
 	msg := confirmDelete(t, true, "old")
-	if !branchExists("old") {
+	if !testrepo.BranchExists("old") {
 		t.Fatal("dry run deleted the branch")
 	}
 	if !strings.HasPrefix(msg.results[0].String(), "Would delete branch old") {
@@ -276,9 +278,9 @@ func TestDryRunConfirmKeepsBranch(t *testing.T) {
 }
 
 func TestConfirmDeletesBranch(t *testing.T) {
-	newTestRepo(t, "old")
+	testrepo.New(t, "old")
 	confirmDelete(t, false, "old")
-	if branchExists("old") {
+	if testrepo.BranchExists("old") {
 		t.Fatal("confirming without dry run should delete the branch")
 	}
 }
@@ -296,9 +298,9 @@ func TestDryRunIsVisible(t *testing.T) {
 }
 
 func TestConfirmFitsShortTerminal(t *testing.T) {
-	var branches []Branch
+	var branches []git.Branch
 	for i := range 30 {
-		branches = append(branches, Branch{Name: fmt.Sprintf("old-%02d", i), Merged: true})
+		branches = append(branches, git.Branch{Name: fmt.Sprintf("old-%02d", i), Merged: true})
 	}
 	next, _ := newModel(options{dryRun: true}).Update(branchesLoadedMsg{base: "main", branches: branches})
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
@@ -405,11 +407,11 @@ func TestReloadDropsSelectionsThatBecameProtected(t *testing.T) {
 
 func TestWorktreeTag(t *testing.T) {
 	m := loadedModel()
-	b := Branch{Name: "review", Worktree: "/work/review"}
+	b := git.Branch{Name: "review", Worktree: "/work/review"}
 	if tags := m.renderTags(b); !strings.Contains(tags, "worktree") {
 		t.Errorf("tags = %q, want a worktree label", tags)
 	}
-	current := Branch{Name: "wip", Current: true, Worktree: "/work/app"}
+	current := git.Branch{Name: "wip", Current: true, Worktree: "/work/app"}
 	if tags := m.renderTags(current); strings.Contains(tags, "worktree") {
 		t.Errorf("the current branch's own worktree shouldn't be labeled: %q", tags)
 	}
@@ -417,7 +419,7 @@ func TestWorktreeTag(t *testing.T) {
 
 func TestInProgressTag(t *testing.T) {
 	m := loadedModel()
-	b := Branch{Name: "feature", InProgress: "rebasing"}
+	b := git.Branch{Name: "feature", InProgress: "rebasing"}
 	if tags := m.renderTags(b); !strings.Contains(tags, "rebasing") {
 		t.Errorf("tags = %q, want a rebasing label", tags)
 	}
@@ -425,11 +427,11 @@ func TestInProgressTag(t *testing.T) {
 
 func TestMergedShownOnProtectedBranches(t *testing.T) {
 	m := loadedModel()
-	inWorktree := Branch{Name: "release", Merged: true, Worktree: "/work/release"}
+	inWorktree := git.Branch{Name: "release", Merged: true, Worktree: "/work/release"}
 	if tags := m.renderTags(inWorktree); !strings.Contains(tags, "worktree") || !strings.Contains(tags, "merged") {
 		t.Errorf("tags = %q, want both worktree and merged", tags)
 	}
-	base := Branch{Name: "main", Merged: true}
+	base := git.Branch{Name: "main", Merged: true}
 	if tags := m.renderTags(base); strings.Contains(tags, "merged") {
 		t.Errorf("the base branch shouldn't be labeled merged: %q", tags)
 	}
@@ -450,7 +452,7 @@ func TestCtrlCWaitsForDeletesToFinish(t *testing.T) {
 		t.Error("the screen should say it will quit when deletion finishes")
 	}
 
-	results := []deleteResult{{Name: "merged-feature", SHA: "abc1234"}}
+	results := []git.DeleteResult{{Name: "merged-feature", SHA: "abc1234"}}
 	next, cmd = m.Update(branchesDeletedMsg{results})
 	m = next.(model)
 	if len(m.history) != 1 {
@@ -479,9 +481,9 @@ func TestManyResultsFitTheScreen(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
 	m = next.(model)
 	for i := range 40 {
-		m.lastResults = append(m.lastResults, deleteResult{Name: fmt.Sprintf("old-%02d", i), SHA: "abc1234"})
+		m.lastResults = append(m.lastResults, git.DeleteResult{Name: fmt.Sprintf("old-%02d", i), SHA: "abc1234"})
 	}
-	m.lastResults = append(m.lastResults, deleteResult{
+	m.lastResults = append(m.lastResults, git.DeleteResult{
 		Name: "busy",
 		Err:  fmt.Errorf("git branch: error: cannot delete branch 'busy' used by worktree at '/a/very/long/path/that/would/wrap/on/a/narrow/screen'"),
 	})
@@ -504,9 +506,9 @@ func TestManyResultsFitTheScreen(t *testing.T) {
 }
 
 func TestListFillsScreenExactly(t *testing.T) {
-	var branches []Branch
+	var branches []git.Branch
 	for i := range 60 {
-		branches = append(branches, Branch{Name: fmt.Sprintf("b-%02d", i), CommitTime: daysAgo(100 - i)})
+		branches = append(branches, git.Branch{Name: fmt.Sprintf("b-%02d", i), CommitTime: daysAgo(100 - i)})
 	}
 	next, _ := newModel(options{}).Update(branchesLoadedMsg{base: "main", branches: branches})
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 20})
@@ -528,9 +530,9 @@ func TestListFillsScreenExactly(t *testing.T) {
 // Run with: go test -run '^$' -bench .
 func BenchmarkRender(b *testing.B) {
 	for _, n := range []int{100, 1000, 5000} {
-		var branches []Branch
+		var branches []git.Branch
 		for i := range n {
-			branches = append(branches, Branch{
+			branches = append(branches, git.Branch{
 				Name: fmt.Sprintf("feature/branch-%05d", i), Merged: true, CommitTime: daysAgo(n - i),
 				Author: "Alex Kim", Subject: "Some commit subject",
 			})
@@ -548,7 +550,7 @@ func BenchmarkRender(b *testing.B) {
 }
 
 func TestBaseOverrideIsUsedWhenLoading(t *testing.T) {
-	newTestRepo(t, "develop")
+	testrepo.New(t, "develop")
 	m := newModel(options{baseOverride: "develop"})
 	loaded, ok := m.loadBranchesCmd()().(branchesLoadedMsg)
 	if !ok || loaded.base != "develop" {

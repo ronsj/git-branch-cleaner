@@ -3,6 +3,8 @@ package main
 import (
 	"cmp"
 	"slices"
+
+	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
 // sortOrder is the order branches are listed in; s cycles through them.
@@ -33,9 +35,9 @@ func (o sortOrder) next() sortOrder {
 
 // sortBranches returns a sorted copy of branches. Ties (same commit time)
 // fall back to the name so the order never shuffles between reloads.
-func sortBranches(branches []Branch, order sortOrder) []Branch {
+func sortBranches(branches []git.Branch, order sortOrder) []git.Branch {
 	sorted := slices.Clone(branches)
-	slices.SortStableFunc(sorted, func(a, b Branch) int {
+	slices.SortStableFunc(sorted, func(a, b git.Branch) int {
 		byName := cmp.Compare(a.Name, b.Name)
 		switch order {
 		case sortNewest:

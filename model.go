@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
 type state int
@@ -23,9 +24,9 @@ const (
 type (
 	branchesLoadedMsg struct {
 		base     string
-		branches []Branch
+		branches []git.Branch
 	}
-	branchesDeletedMsg struct{ results []deleteResult }
+	branchesDeletedMsg struct{ results []git.DeleteResult }
 	errMsg             struct{ err error }
 )
 
@@ -41,7 +42,7 @@ type model struct {
 	sortBy   sortOrder
 	state    state
 	base     string
-	branches []Branch // every local branch; see visibleBranches for the filtered list
+	branches []git.Branch // every local branch; see visibleBranches for the filtered list
 	selected map[string]bool
 	cursor   int // index into visibleBranches()
 	offset   int // index of the first visible row when the list scrolls
@@ -52,9 +53,9 @@ type model struct {
 	help    help.Model
 	filter  textinput.Model // focused while the user is typing a filter
 
-	lastResults []deleteResult // shown under the list after a delete
-	history     []deleteResult // every delete (or dry-run preview) this session, printed on exit
-	quitting    bool           // ctrl+c came in mid-delete; quit once the results are in
+	lastResults []git.DeleteResult // shown under the list after a delete
+	history     []git.DeleteResult // every delete (or dry-run preview) this session, printed on exit
+	quitting    bool               // ctrl+c came in mid-delete; quit once the results are in
 	err         error
 }
 
@@ -78,7 +79,7 @@ func newModel(opts options) model {
 func (m model) loadBranchesCmd() tea.Cmd {
 	baseOverride := m.baseOverride // captured: the command runs in the background
 	return func() tea.Msg {
-		base, branches, err := loadBranches(baseOverride)
+		base, branches, err := git.LoadBranches(baseOverride)
 		if err != nil {
 			return errMsg{err}
 		}
@@ -86,12 +87,12 @@ func (m model) loadBranchesCmd() tea.Cmd {
 	}
 }
 
-func deleteBranchesCmd(branches []Branch, base string, dryRun bool) tea.Cmd {
+func deleteBranchesCmd(branches []git.Branch, base string, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			return branchesDeletedMsg{previewDeletes(branches)}
+			return branchesDeletedMsg{git.PreviewDeletes(branches)}
 		}
-		return branchesDeletedMsg{deleteBranches(branches, base)}
+		return branchesDeletedMsg{git.DeleteBranches(branches, base)}
 	}
 }
 
@@ -105,12 +106,12 @@ func (m model) busy() bool {
 
 // visibleBranches returns the branches shown in the list: those not hidden
 // by --older-than whose names match the filter, case-insensitively.
-func (m model) visibleBranches() []Branch {
+func (m model) visibleBranches() []git.Branch {
 	query := strings.ToLower(strings.TrimSpace(m.filter.Value()))
 	if query == "" && m.olderThanDays == 0 {
 		return m.branches
 	}
-	var visible []Branch
+	var visible []git.Branch
 	for _, b := range m.branches {
 		if m.tooRecent(b) {
 			continue
@@ -124,7 +125,7 @@ func (m model) visibleBranches() []Branch {
 }
 
 // tooRecent reports whether --older-than hides b.
-func (m model) tooRecent(b Branch) bool {
+func (m model) tooRecent(b git.Branch) bool {
 	minAge := time.Duration(m.olderThanDays) * 24 * time.Hour
 	return m.olderThanDays > 0 && time.Since(b.CommitTime) < minAge
 }
@@ -142,18 +143,18 @@ func (m *model) moveCursorTo(name string) {
 }
 
 // cursorBranch returns the branch under the cursor, if the list isn't empty.
-func (m model) cursorBranch() (Branch, bool) {
+func (m model) cursorBranch() (git.Branch, bool) {
 	visible := m.visibleBranches()
 	if m.cursor < len(visible) {
 		return visible[m.cursor], true
 	}
-	return Branch{}, false
+	return git.Branch{}, false
 }
 
 // selectedBranches returns selected branches in list order (maps are
 // unordered in Go).
-func (m model) selectedBranches() []Branch {
-	var selected []Branch
+func (m model) selectedBranches() []git.Branch {
+	var selected []git.Branch
 	for _, b := range m.branches {
 		if m.selected[b.Name] {
 			selected = append(selected, b)
@@ -170,7 +171,7 @@ func (m model) selectedNames() []string {
 	return names
 }
 
-func indexOf(branches []Branch, name string) int {
+func indexOf(branches []git.Branch, name string) int {
 	for i, b := range branches {
 		if b.Name == name {
 			return i

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func printHistory(m model) {
 		}
 		fmt.Println(r)
 		if !r.DryRun {
-			fmt.Println("  restore:", restoreCommand(r.Name, r.SHA))
+			fmt.Println("  restore:", git.RestoreCommand(r.Name, r.SHA))
 		}
 	}
 }
