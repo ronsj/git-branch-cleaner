@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -218,5 +219,31 @@ func TestUpdateLeavesEarlierModelsUnchanged(t *testing.T) {
 	press(selected, "enter", "y") // confirming clears the selection
 	if got := selected.selectedNames(); !reflect.DeepEqual(got, want) {
 		t.Errorf("confirming changed the earlier model: %v, want %v", got, want)
+	}
+}
+
+// The error replaces the list, so keys that act on branches must do nothing:
+// otherwise enter then y would delete with no confirm screen showing.
+func TestErrorScreenOnlyAcceptsRetryAndQuit(t *testing.T) {
+	next, _ := press(loadedModel(), "a").Update(errMsg{errors.New("base branch \"main\" doesn't exist")})
+	errored := next.(Model)
+
+	m := press(errored, "enter", "y", "space", "n")
+	if m.state != stateBrowsing {
+		t.Fatalf("state = %v, want browsing", m.state)
+	}
+	if got, want := m.selectedNames(), []string{"merged-feature", "gone-feature"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected %v, want %v unchanged", got, want)
+	}
+
+	if m := press(errored, "r"); m.state != stateLoading {
+		t.Fatalf("state = %v after r, want loading", m.state)
+	}
+	_, cmd := errored.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd == nil {
+		t.Fatal("expected a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("q on the error screen should quit")
 	}
 }

@@ -78,6 +78,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		switch {
+		case m.state == stateBrowsing && m.err != nil:
+			return m.updateError(msg)
 		case m.state == stateBrowsing && m.filter.Focused():
 			return m.updateFiltering(msg)
 		case m.state == stateBrowsing:
@@ -146,6 +148,16 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 
 	m.scrollToCursor()
+	return m, nil
+}
+
+// updateError handles keys while an error is shown. The error replaces the
+// list, so only retry and quit work: any other key would act on branches the
+// user can't see, and enter then y would delete them with no confirm screen.
+func (m Model) updateError(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if key.Matches(msg, keys.Refresh, keys.Quit) {
+		return m.updateBrowsing(msg)
+	}
 	return m, nil
 }
 
