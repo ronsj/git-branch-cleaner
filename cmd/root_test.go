@@ -51,7 +51,7 @@ func TestRunUsageErrors(t *testing.T) {
 		{[]string{"--help"}, 0, "-older-than N"},
 		{[]string{"stray"}, 2, "unexpected argument: stray"},
 		{[]string{"--dryrun"}, 2, "flag provided but not defined: -dryrun"},
-		{[]string{"-older-than", "-1"}, 2, "-older-than must be 0 or more days, got -1"},
+		{[]string{"-older-than", "-1"}, 2, "--older-than must be 0 or more days, got -1"},
 		{[]string{"--older-than", "abc"}, 2, `invalid value "abc" for flag -older-than`},
 	}
 	for _, tt := range tests {

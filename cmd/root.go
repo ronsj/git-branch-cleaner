@@ -53,7 +53,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *olderThan < 0 {
-		fmt.Fprintf(stderr, "-older-than must be 0 or more days, got %d\n", *olderThan)
+		fmt.Fprintf(stderr, "--older-than must be 0 or more days, got %d\n", *olderThan)
 		return 2
 	}
 
