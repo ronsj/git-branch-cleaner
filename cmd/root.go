@@ -29,7 +29,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	dryRun := flags.Bool("dry-run", false, "show what would be deleted without deleting anything")
 	olderThan := flags.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
-	base := flags.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
+	base := flags.String("base", "", "compare against `branch`, local or remote-tracking (like origin/main),\ninstead of detecting it (default: origin's default branch, then main,\nthen master)")
 	showVersion := flags.Bool("version", false, "print the version and exit")
 	flags.Usage = func() {
 		fmt.Fprintf(flags.Output(), "Usage: git-branch-cleaner [flags]\n\n")

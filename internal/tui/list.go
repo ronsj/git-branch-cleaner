@@ -82,7 +82,7 @@ func (m Model) renderTags(b git.Branch) string {
 	if b.Current {
 		tags = append(tags, mutedStyle.Render("current"))
 	}
-	if b.Name == m.base {
+	if b.IsBase(m.base) {
 		tags = append(tags, mutedStyle.Render("base"))
 	}
 	if b.InOtherWorktree() {
@@ -93,7 +93,7 @@ func (m Model) renderTags(b git.Branch) string {
 	}
 	// Shown even on protected branches: "worktree merged" says the branch can
 	// go once that worktree does. The base is always merged into itself.
-	if b.Merged && b.Name != m.base {
+	if b.Merged && !b.IsBase(m.base) {
 		tags = append(tags, mergedStyle.Render("merged"))
 	}
 	if b.Gone {

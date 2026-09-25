@@ -54,8 +54,8 @@ func PreviewDeletes(branches []Branch, base string) []DeleteResult {
 // minutes ago), with how they are now. It returns the commit of each branch
 // that's still safe to delete, and the reason each other one isn't: it no
 // longer exists, it points at a different commit, it was merged into base
-// and no longer is, or it has become protected (checked out, or in use by a
-// rebase or bisect).
+// and no longer is, or it has become protected (the base, checked out, or in
+// use by a rebase or bisect).
 func recheck(branches []Branch, base string) (ready map[string]string, skipped map[string]error, err error) {
 	_, current, err := LoadBranches(base)
 	if err != nil {
@@ -77,6 +77,8 @@ func recheck(branches []Branch, base string) (ready map[string]string, skipped m
 			skipped[b.Name] = errors.New("it changed since you selected it")
 		case b.Merged && !c.Merged:
 			skipped[b.Name] = fmt.Errorf("it's no longer merged into %s", base)
+		case c.IsBase(base):
+			skipped[b.Name] = errors.New("it's the base branch")
 		case c.Current:
 			skipped[b.Name] = errors.New("it's checked out")
 		case c.InOtherWorktree():

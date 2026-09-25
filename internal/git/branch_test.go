@@ -23,3 +23,23 @@ func TestProtected(t *testing.T) {
 		}
 	}
 }
+
+func TestIsBase(t *testing.T) {
+	tracksOrigin := Branch{Name: "main", Upstream: "refs/remotes/origin/main"}
+	tests := []struct {
+		name   string
+		branch Branch
+		base   string
+		want   bool
+	}{
+		{"local base", tracksOrigin, "main", true},
+		{"tracks a remote-tracking base", tracksOrigin, "origin/main", true},
+		{"tracks a different branch", Branch{Name: "feature", Upstream: "refs/remotes/origin/feature"}, "origin/main", false},
+		{"no base", Branch{Name: "main"}, "", false},
+	}
+	for _, tt := range tests {
+		if got := tt.branch.IsBase(tt.base); got != tt.want {
+			t.Errorf("%s: IsBase(%q) = %v, want %v", tt.name, tt.base, got, tt.want)
+		}
+	}
+}

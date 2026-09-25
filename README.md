@@ -80,7 +80,7 @@ your terminal are cut off with `…`.
 | --- | --- |
 | `--dry-run` | Show what would be deleted without deleting anything |
 | `--older-than N` | Hide branches whose last commit is less than `N` days old |
-| `--base branch` | Compare against `branch` instead of detecting the base branch |
+| `--base branch` | Compare against `branch` instead of detecting the base branch. It can be a remote-tracking branch, such as `origin/main` |
 | `--version` | Print the version and exit |
 
 With `--dry-run`, the whole UI works the same, with a **DRY RUN** badge in the
@@ -134,7 +134,7 @@ lists every selected branch, hidden or not.
 | `merged` | Every commit on the branch is already in the base branch. Safe to delete. Also shown on branches that can't be selected yet, such as `worktree merged`: remove that worktree and the branch is safe to delete. |
 | `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches show up this way, because git doesn't see their commits in the base branch. |
 | `current` | The branch you have checked out. It can't be selected. |
-| `base` | The branch everything is compared against. It can't be selected. |
+| `base` | The branch everything is compared against. With a remote-tracking base such as `origin/main`, it's the local branch that tracks it. It can't be selected. |
 | `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it, so it can't be selected. |
 | `rebasing` / `bisecting` | A rebase or bisect in some worktree is using the branch. Git won't delete it until that finishes, so it can't be selected. |
 
@@ -142,6 +142,11 @@ The base branch is the remote's default branch (`origin/HEAD`) if it exists
 locally, otherwise `main`, then `master`, then whatever is checked out. If your
 repo's main line has another name, such as `develop`, pass it with
 `--base develop`.
+
+Branches merged on the remote, through a pull request say, only show as
+`merged` once your local `main` has caught up. To skip pulling, compare
+against the remote's copy instead: run `git fetch`, then
+`git-branch-cleaner --base origin/main`.
 
 The `gone` label depends on your local copy of the remote. Run
 `git fetch --prune` first so branches deleted on the remote are detected.
