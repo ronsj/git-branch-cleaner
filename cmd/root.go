@@ -5,6 +5,7 @@ package cmd
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -39,7 +40,7 @@ func Execute() {
 	// Run returns the last model even when it fails, and branches may already
 	// have been deleted, so print the history before reporting the error.
 	if m, ok := final.(tui.Model); ok {
-		printHistory(m)
+		printHistory(os.Stdout, m.History(), m.DryRun)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
@@ -47,19 +48,17 @@ func Execute() {
 	}
 }
 
-// printHistory prints what was deleted, with restore commands. The alt screen
-// is cleared on exit, so this is the copy that stays in the terminal.
-func printHistory(m tui.Model) {
-	if m.DryRun && len(m.History()) > 0 {
-		fmt.Println("Dry run: no branches were deleted.")
+// printHistory prints what was deleted, with restore commands, and what
+// wasn't and why. The alt screen is cleared on exit, so this is the copy that
+// stays in the terminal.
+func printHistory(w io.Writer, history []git.DeleteResult, dryRun bool) {
+	if dryRun && len(history) > 0 {
+		fmt.Fprintln(w, "Dry run: no branches were deleted.")
 	}
-	for _, r := range m.History() {
-		if r.Err != nil {
-			continue
-		}
-		fmt.Println(r)
-		if !r.DryRun {
-			fmt.Println("  restore:", git.RestoreCommand(r.Name, r.SHA))
+	for _, r := range history {
+		fmt.Fprintln(w, r)
+		if r.Err == nil && !r.DryRun {
+			fmt.Fprintln(w, "  restore:", git.RestoreCommand(r.Name, r.SHA))
 		}
 	}
 }

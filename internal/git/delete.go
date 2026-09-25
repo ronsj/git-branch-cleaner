@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 )
@@ -14,12 +15,20 @@ type DeleteResult struct {
 	Err    error
 }
 
+// String describes the outcome in a sentence, for the UI and the summary
+// printed on exit.
 func (r DeleteResult) String() string {
 	short := r.SHA[:min(len(r.SHA), 7)]
-	if r.DryRun {
+	switch {
+	case r.Err != nil && r.DryRun:
+		return fmt.Sprintf("Wouldn't delete %s: %v", r.Name, r.Err)
+	case r.Err != nil:
+		return fmt.Sprintf("Didn't delete %s: %v", r.Name, r.Err)
+	case r.DryRun:
 		return fmt.Sprintf("Would delete branch %s (at %s).", r.Name, short)
+	default:
+		return fmt.Sprintf("Deleted branch %s (was %s).", r.Name, short)
 	}
-	return fmt.Sprintf("Deleted branch %s (was %s).", r.Name, short)
 }
 
 // PreviewDeletes reports what DeleteBranches would do, without deleting
@@ -62,17 +71,17 @@ func recheck(branches []Branch, base string) (ready map[string]string, skipped m
 		c, exists := now[b.Name]
 		switch {
 		case !exists:
-			skipped[b.Name] = fmt.Errorf("branch %s no longer exists", b.Name)
+			skipped[b.Name] = errors.New("it no longer exists")
 		case c.SHA != b.SHA:
-			skipped[b.Name] = fmt.Errorf("skipped %s: it changed since you selected it", b.Name)
+			skipped[b.Name] = errors.New("it changed since you selected it")
 		case b.Merged && !c.Merged:
-			skipped[b.Name] = fmt.Errorf("skipped %s: it's no longer merged into %s", b.Name, base)
+			skipped[b.Name] = fmt.Errorf("it's no longer merged into %s", base)
 		case c.Current:
-			skipped[b.Name] = fmt.Errorf("skipped %s: it's checked out", b.Name)
+			skipped[b.Name] = errors.New("it's checked out")
 		case c.InOtherWorktree():
-			skipped[b.Name] = fmt.Errorf("skipped %s: it's checked out in another worktree", b.Name)
+			skipped[b.Name] = errors.New("it's checked out in another worktree")
 		case c.InProgress != "":
-			skipped[b.Name] = fmt.Errorf("skipped %s: it's in use (%s)", b.Name, c.InProgress)
+			skipped[b.Name] = fmt.Errorf("it's in use (%s)", c.InProgress)
 		default:
 			ready[b.Name] = c.SHA
 		}

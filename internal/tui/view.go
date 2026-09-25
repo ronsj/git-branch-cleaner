@@ -104,7 +104,7 @@ func (m Model) resultLines() []string {
 	var failed, deleted []string
 	for _, r := range m.lastResults {
 		if r.Err != nil {
-			failed = append(failed, errorStyle.Render("✗ "+r.Err.Error()))
+			failed = append(failed, errorStyle.Render("✗ "+r.String()))
 		} else {
 			deleted = append(deleted, mergedStyle.Render("✓ "+r.String()))
 		}

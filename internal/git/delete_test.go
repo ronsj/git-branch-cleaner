@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,8 @@ func TestDeleteResultString(t *testing.T) {
 	}{
 		{DeleteResult{Name: "feature/x", SHA: sha}, "Deleted branch feature/x (was 1a2b3c4)."},
 		{DeleteResult{Name: "feature/x", SHA: sha, DryRun: true}, "Would delete branch feature/x (at 1a2b3c4)."},
+		{DeleteResult{Name: "feature/x", Err: errors.New("it changed since you selected it")}, "Didn't delete feature/x: it changed since you selected it"},
+		{DeleteResult{Name: "feature/x", DryRun: true, Err: errors.New("it's checked out")}, "Wouldn't delete feature/x: it's checked out"},
 	}
 	for _, tt := range tests {
 		if got := tt.result.String(); got != tt.want {

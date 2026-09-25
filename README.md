@@ -152,11 +152,12 @@ into the base branch, the confirmation screen warns you before anything is
 deleted.
 
 When you quit, git-branch-cleaner prints a restore command for each branch it
-deleted:
+deleted, and the reason for any it didn't:
 
 ```
 Deleted branch fix/header-typo (was c6d677e).
-  restore: git branch fix/header-typo c6d677e
+  restore: git branch fix/header-typo c6d677e4b1f0a9d2e3c5b7a8f9e0d1c2b3a4f5e6
+Didn't delete feature/login: it changed since you selected it
 ```
 
 Run the restore command to bring a branch back. If you've lost the output,
