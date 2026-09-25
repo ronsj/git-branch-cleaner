@@ -103,6 +103,7 @@ type model struct {
 
 	lastResults []deleteResult // shown under the list after a delete
 	history     []deleteResult // every delete (or dry-run preview) this session, printed on exit
+	quitting    bool           // ctrl+c came in mid-delete; quit once the results are in
 	err         error
 }
 
@@ -188,6 +189,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case branchesDeletedMsg:
 		m.lastResults = msg.results
 		m.history = append(m.history, msg.results...)
+		if m.quitting {
+			return m, tea.Quit
+		}
 		m.state = stateLoading
 		return m, loadBranchesCmd
 
@@ -198,6 +202,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
+			// Quitting mid-delete would lose the results, and with them the
+			// restore commands printed on exit, so wait for them.
+			if m.state == stateDeleting {
+				m.quitting = true
+				return m, nil
+			}
 			return m, tea.Quit
 		}
 		switch {
@@ -438,9 +448,12 @@ func (m model) render() string {
 		s.WriteString(m.spinner.View() + " Loading branches…")
 		return s.String()
 	case stateDeleting:
-		if m.dryRun {
+		switch {
+		case m.quitting:
+			s.WriteString(m.spinner.View() + " Finishing deletions, then quitting…")
+		case m.dryRun:
 			s.WriteString(m.spinner.View() + " Previewing deletions…")
-		} else {
+		default:
 			s.WriteString(m.spinner.View() + " Deleting branches…")
 		}
 		return s.String()

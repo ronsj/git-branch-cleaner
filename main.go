@@ -29,18 +29,21 @@ func main() {
 
 	opts := options{dryRun: *dryRun, olderThanDays: *olderThan}
 	final, err := tea.NewProgram(newModel(opts)).Run()
+	// Run returns the last model even when it fails, and branches may already
+	// have been deleted, so print the history before reporting the error.
+	if m, ok := final.(model); ok {
+		printHistory(m)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
 
-	// The alt screen is cleared on exit, so print what was deleted
-	// (with restore commands) to the normal terminal scrollback.
-	m, ok := final.(model)
-	if !ok {
-		return
-	}
-	if *dryRun && len(m.history) > 0 {
+// printHistory prints what was deleted, with restore commands. The alt screen
+// is cleared on exit, so this is the copy that stays in the terminal.
+func printHistory(m model) {
+	if m.dryRun && len(m.history) > 0 {
 		fmt.Println("Dry run: no branches were deleted.")
 	}
 	for _, r := range m.history {

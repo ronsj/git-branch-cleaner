@@ -433,3 +433,42 @@ func TestMergedShownOnProtectedBranches(t *testing.T) {
 		t.Errorf("the base branch shouldn't be labeled merged: %q", tags)
 	}
 }
+
+func TestCtrlCWaitsForDeletesToFinish(t *testing.T) {
+	m := press(loadedModel(), "a", "enter", "y")
+	if m.state != stateDeleting {
+		t.Fatalf("state = %v, want deleting", m.state)
+	}
+
+	next, cmd := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	m = next.(model)
+	if cmd != nil {
+		t.Fatal("ctrl+c mid-delete should not quit yet")
+	}
+	if !strings.Contains(m.render(), "then quitting") {
+		t.Error("the screen should say it will quit when deletion finishes")
+	}
+
+	results := []deleteResult{{Name: "merged-feature", Output: "Deleted branch merged-feature (was abc1234)."}}
+	next, cmd = m.Update(branchesDeletedMsg{results})
+	m = next.(model)
+	if len(m.history) != 1 {
+		t.Fatal("the results should be kept for the exit summary")
+	}
+	if cmd == nil {
+		t.Fatal("expected a quit command once the results arrived")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("expected tea.Quit once the results arrived")
+	}
+}
+
+func TestCtrlCQuitsImmediatelyWhenNotDeleting(t *testing.T) {
+	_, cmd := loadedModel().Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl})
+	if cmd == nil {
+		t.Fatal("expected a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("ctrl+c while browsing should quit right away")
+	}
+}
