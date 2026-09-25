@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // Positions of the fields in each for-each-ref record.
@@ -67,11 +68,27 @@ func parseBranches(out string) []Branch {
 			Current:    fields[fieldHead] == "*",
 			Gone:       fields[fieldUpstreamTrack] == "[gone]",
 			Worktree:   fields[fieldWorktree],
-			Author:     fields[fieldAuthor],
-			Subject:    fields[fieldSubject],
+			Author:     printable(fields[fieldAuthor]),
+			Subject:    printable(fields[fieldSubject]),
 		})
 	}
 	return branches
+}
+
+// printable drops control characters from s, since a terminal acts on them
+// instead of showing them: a commit's author or subject could otherwise move
+// the cursor, restyle the screen, or add a link. Tabs become spaces. (Git
+// already does this to its own error messages.)
+func printable(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '\t':
+			return ' '
+		case unicode.IsControl(r):
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // baseBranch guesses the repo's main line: origin's default branch if known,
