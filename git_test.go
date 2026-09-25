@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"maps"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -23,20 +25,20 @@ func forEachRefOutput(rows ...[]string) string {
 
 func TestParseBranches(t *testing.T) {
 	out := forEachRefOutput(
-		[]string{"old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form"},
-		[]string{"main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login"},
-		[]string{"wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject"},
-		[]string{"empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", ""},
-		[]string{"bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", ""},
+		[]string{"old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"},
+		[]string{"main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"},
+		[]string{"wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"},
+		[]string{"empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"},
+		[]string{"bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"},
 	)
 
 	got := parseBranches(out)
 	want := []Branch{
-		{Name: "old-feature", LastCommit: "3 months ago", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form"},
-		{Name: "main", LastCommit: "2 days ago", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login"},
-		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject"},
-		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim"},
-		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim"},
+		{Name: "old-feature", LastCommit: "3 months ago", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
+		{Name: "main", LastCommit: "2 days ago", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
+		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject", SHA: "cccc333"},
+		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim", SHA: "dddd444"},
+		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim", SHA: "eeee555"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseBranches:\n got  %+v\n want %+v", got, want)
@@ -44,7 +46,7 @@ func TestParseBranches(t *testing.T) {
 }
 
 func TestParseBranchesWithTrailingNewline(t *testing.T) {
-	out := forEachRefOutput([]string{"a", "now", "1", " ", "", "", "Sam", ""}) + "\n"
+	out := forEachRefOutput([]string{"a", "now", "1", " ", "", "", "Sam", "", "ffff666"}) + "\n"
 	if got := parseBranches(out); len(got) != 1 || got[0].Name != "a" {
 		t.Errorf("parseBranches = %+v, want the one branch", got)
 	}
@@ -139,13 +141,15 @@ func TestLoadBranches(t *testing.T) {
 func TestPreviewDeletesKeepsBranches(t *testing.T) {
 	newTestRepo(t, "old")
 
-	results := previewDeletes([]string{"old", "missing"})
+	old := loadBranch(t, "old")
 
-	if results[0].Err != nil || !strings.HasPrefix(results[0].String(), "Would delete branch old (at ") {
-		t.Errorf("preview of old = %+v", results[0])
+	results := previewDeletes([]Branch{old})
+
+	if results[0].Err != nil || results[0].SHA != mustGit(t, "rev-parse", "refs/heads/old") {
+		t.Errorf("preview of old = %+v, want its current commit", results[0])
 	}
-	if results[1].Err == nil {
-		t.Error("previewing a branch that doesn't exist should report an error")
+	if !strings.HasPrefix(results[0].String(), "Would delete branch old (at ") {
+		t.Errorf("preview message = %q", results[0].String())
 	}
 	if !branchExists("old") {
 		t.Fatal("a dry run must not delete the branch")
@@ -156,7 +160,7 @@ func TestDeleteBranchesCanBeRestored(t *testing.T) {
 	newTestRepo(t, "old")
 	tip := mustGit(t, "rev-parse", "refs/heads/old")
 
-	results := deleteBranches([]string{"old"})
+	results := deleteBranches(branchesNamed(t, "old"))
 	if results[0].Err != nil {
 		t.Fatal(results[0].Err)
 	}
@@ -220,7 +224,7 @@ func TestLoadBranchesDetectsOtherWorktrees(t *testing.T) {
 	}
 
 	// The protection matches git's own rule: it refuses this delete.
-	if results := deleteBranches([]string{"review"}); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "review")); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch checked out in a worktree")
 	}
 }
@@ -234,6 +238,24 @@ func commitFile(t *testing.T, dir, message string) {
 	}
 	mustGit(t, "-C", dir, "add", "file.txt")
 	mustGit(t, "-C", dir, "commit", "-q", "-m", message)
+}
+
+// branchesNamed loads the named branches from the test repo.
+func branchesNamed(t *testing.T, names ...string) []Branch {
+	t.Helper()
+	_, all, err := loadBranches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var branches []Branch
+	for _, name := range names {
+		i := indexOf(all, name)
+		if i < 0 {
+			t.Fatalf("branch %q not found", name)
+		}
+		branches = append(branches, all[i])
+	}
+	return branches
 }
 
 func loadBranch(t *testing.T, name string) Branch {
@@ -270,7 +292,7 @@ func TestLoadBranchesDetectsRebaseInProgress(t *testing.T) {
 	if feature.InProgress != "rebasing" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked rebasing", feature)
 	}
-	if results := deleteBranches([]string{"feature"}); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "feature")); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch that's being rebased")
 	}
 }
@@ -295,7 +317,7 @@ func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
 	if feature.InProgress != "bisecting" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked bisecting", feature)
 	}
-	if results := deleteBranches([]string{"feature"}); results[0].Err == nil {
+	if results := deleteBranches(branchesNamed(t, "feature")); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch that's being bisected")
 	}
 }
@@ -344,7 +366,7 @@ func TestLoadBranchesWithTagNamedLikeBranches(t *testing.T) {
 	if byName["only-in-tag"].Merged {
 		t.Error("only-in-tag is merged into the tag main, not the branch main")
 	}
-	if results := deleteBranches([]string{"v1"}); results[0].Err != nil {
+	if results := deleteBranches(branchesNamed(t, "v1")); results[0].Err != nil {
 		t.Errorf("a branch that shares a tag's name should be deletable: %v", results[0].Err)
 	}
 }
@@ -366,17 +388,63 @@ func TestDeleteBranchNamedLikeAnOption(t *testing.T) {
 		mustGit(t, "update-ref", "refs/heads/"+name, "HEAD")
 	}
 
-	for _, r := range previewDeletes([]string{"-r", "--all"}) {
+	for _, r := range previewDeletes(branchesNamed(t, "-r", "--all")) {
 		if r.Err != nil {
 			t.Errorf("preview of %q: %v", r.Name, r.Err)
 		}
 	}
-	for _, r := range deleteBranches([]string{"-r", "--all"}) {
+	for _, r := range deleteBranches(branchesNamed(t, "-r", "--all")) {
 		if r.Err != nil {
 			t.Errorf("delete of %q: %v", r.Name, r.Err)
 		}
 		if branchExists(r.Name) {
 			t.Errorf("%q should be deleted", r.Name)
 		}
+	}
+}
+
+func TestDeleteBranchesInSeveralBatches(t *testing.T) {
+	newTestRepo(t)
+	var names []string
+	var creates strings.Builder
+	for i := range deleteBatchSize + 50 {
+		name := fmt.Sprintf("old-%03d", i)
+		names = append(names, name)
+		fmt.Fprintf(&creates, "create refs/heads/%s HEAD\n", name)
+	}
+	cmd := exec.Command("git", "update-ref", "--stdin")
+	cmd.Stdin = strings.NewReader(creates.String())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("creating branches: %v %s", err, out)
+	}
+	tip := mustGit(t, "rev-parse", "HEAD")
+
+	results := deleteBranches(branchesNamed(t, names...))
+	remaining, err := branchSHAs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range results {
+		if _, still := remaining[r.Name]; r.Err != nil || r.SHA != tip || still {
+			t.Fatalf("result %+v: want deleted, with SHA %s", r, tip)
+		}
+	}
+}
+
+func TestDeleteBranchesReportsEachFailure(t *testing.T) {
+	newTestRepo(t, "a", "busy", "b")
+	mustGit(t, "worktree", "add", "-q", filepath.Join(t.TempDir(), "wt"), "busy")
+	branches := branchesNamed(t, "a", "busy", "b")
+	mustGit(t, "branch", "-D", "b") // deleted by someone else after loading
+
+	results := deleteBranches(branches)
+	if results[0].Err != nil || branchExists("a") {
+		t.Errorf("a: %+v, want deleted", results[0])
+	}
+	if results[1].Err == nil || !strings.Contains(results[1].Err.Error(), "worktree") {
+		t.Errorf("busy: err = %v, want git's reason (checked out in a worktree)", results[1].Err)
+	}
+	if results[2].Err == nil || !strings.Contains(results[2].Err.Error(), "no longer exists") {
+		t.Errorf("b: err = %v, want 'no longer exists'", results[2].Err)
 	}
 }

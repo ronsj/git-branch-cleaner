@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 // Branch is one local git branch plus the metadata shown in the UI.
 type Branch struct {
 	Name       string
+	SHA        string    // full commit the branch points to
 	LastCommit string    // relative date for display, e.g. "3 weeks ago"
 	CommitTime time.Time // exact date, for sorting and age checks
 	Current    bool      // checked out right now
@@ -85,6 +87,7 @@ var branchFields = []string{
 	"%(worktreepath)",
 	"%(authorname)",
 	"%(contents:subject)",
+	"%(objectname)",
 }
 
 // branchFormat separates fields with NUL (%00) and ends each record with one,
@@ -118,6 +121,7 @@ func parseBranches(out string) []Branch {
 			Worktree:   fields[5],
 			Author:     fields[6],
 			Subject:    fields[7],
+			SHA:        fields[8],
 		})
 	}
 	return branches
@@ -227,42 +231,87 @@ func readTrimmed(path string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// branchSHA returns the full commit a branch points to.
-func branchSHA(name string) (string, error) {
-	sha, err := git("rev-parse", "--verify", "--quiet", "refs/heads/"+name)
+// branchSHAs returns the commit every local branch points to, in one git call.
+func branchSHAs() (map[string]string, error) {
+	out, err := git("for-each-ref", "--format=%(refname:lstrip=2)%00%(objectname)", "refs/heads/")
 	if err != nil {
-		return "", fmt.Errorf("branch %s no longer exists", name)
+		return nil, err
 	}
-	return sha, nil
+	shas := make(map[string]string)
+	// Branch names can't contain newlines or NUL, so lines split cleanly.
+	for line := range strings.SplitSeq(out, "\n") {
+		if name, sha, ok := strings.Cut(line, "\x00"); ok {
+			shas[name] = sha
+		}
+	}
+	return shas, nil
 }
 
-// previewDeletes reports what deleteBranches would do, without deleting anything.
-func previewDeletes(names []string) []deleteResult {
-	results := make([]deleteResult, 0, len(names))
-	for _, name := range names {
-		sha, err := branchSHA(name)
-		results = append(results, deleteResult{Name: name, SHA: sha, DryRun: true, Err: err})
+// previewDeletes reports what deleteBranches would do, without deleting
+// anything. It uses the commits recorded when the branches were loaded.
+func previewDeletes(branches []Branch) []deleteResult {
+	results := make([]deleteResult, 0, len(branches))
+	for _, b := range branches {
+		results = append(results, deleteResult{Name: b.Name, SHA: b.SHA, DryRun: true})
 	}
 	return results
 }
 
-// deleteBranches force-deletes each branch. Force (-D) is deliberate: -d checks
-// against HEAD rather than the base branch, and the UI has already warned
-// about unmerged branches on the confirm screen.
+// deleteBatchSize caps how many names go into one `git branch -D` call,
+// keeping the command line well under the OS limit.
+const deleteBatchSize = 200
+
+// deleteBranches force-deletes the branches. Force (-D) is deliberate: -d
+// checks against HEAD rather than the base branch, and the UI has already
+// warned about unmerged branches on the confirm screen.
 //
-// The commit each branch pointed to is read just before deleting it, for the
-// restore command. It comes from git directly rather than from git's
-// "Deleted branch x (was abc1234)." message, which is translated in some
-// languages.
-func deleteBranches(names []string) []deleteResult {
-	results := make([]deleteResult, 0, len(names))
-	for _, name := range names {
-		sha, err := branchSHA(name)
-		if err == nil {
-			// "--" ends the options, so a name like "-r" isn't read as a flag.
-			_, err = git("branch", "-D", "--", name)
+// For speed, it reads every branch's commit once, deletes in batches (one git
+// process per branch is ~25x slower), then reads again to see what's gone.
+// Commits come from git directly rather than from its "Deleted branch x (was
+// abc1234)." message, which is translated in some languages.
+func deleteBranches(branches []Branch) []deleteResult {
+	before, err := branchSHAs()
+	if err != nil {
+		return failAll(branches, err)
+	}
+	var names []string
+	for _, b := range branches {
+		if _, ok := before[b.Name]; ok {
+			names = append(names, b.Name)
 		}
-		results = append(results, deleteResult{Name: name, SHA: sha, Err: err})
+	}
+	for batch := range slices.Chunk(names, deleteBatchSize) {
+		// Errors are ignored here: git deletes what it can, and the check
+		// below works out which branches are gone. "--" ends the options, so
+		// a name like "-r" isn't read as a flag.
+		git(append([]string{"branch", "-D", "--"}, batch...)...)
+	}
+	after, err := branchSHAs()
+	if err != nil {
+		return failAll(branches, fmt.Errorf("couldn't check what was deleted: %w", err))
+	}
+
+	results := make([]deleteResult, 0, len(branches))
+	for _, b := range branches {
+		sha, existed := before[b.Name]
+		var err error
+		switch _, remains := after[b.Name]; {
+		case !existed:
+			err = fmt.Errorf("branch %s no longer exists", b.Name)
+		case remains:
+			// Git refused (in a worktree, say). Try once more on its own to
+			// get git's reason for this branch.
+			_, err = git("branch", "-D", "--", b.Name)
+		}
+		results = append(results, deleteResult{Name: b.Name, SHA: sha, Err: err})
+	}
+	return results
+}
+
+func failAll(branches []Branch, err error) []deleteResult {
+	results := make([]deleteResult, 0, len(branches))
+	for _, b := range branches {
+		results = append(results, deleteResult{Name: b.Name, Err: err})
 	}
 	return results
 }

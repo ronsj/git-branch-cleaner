@@ -132,12 +132,12 @@ func loadBranchesCmd() tea.Msg {
 	return branchesLoadedMsg{base, branches}
 }
 
-func deleteBranchesCmd(names []string, dryRun bool) tea.Cmd {
+func deleteBranchesCmd(branches []Branch, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			return branchesDeletedMsg{previewDeletes(names)}
+			return branchesDeletedMsg{previewDeletes(branches)}
 		}
-		return branchesDeletedMsg{deleteBranches(names)}
+		return branchesDeletedMsg{deleteBranches(branches)}
 	}
 }
 
@@ -313,10 +313,10 @@ func (m *model) setFilter(value string) {
 func (m model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Confirm):
-		names := m.selectedNames()
+		selected := m.selectedBranches()
 		clear(m.selected)
 		m.state = stateDeleting
-		return m, tea.Batch(deleteBranchesCmd(names, m.dryRun), m.spinner.Tick)
+		return m, tea.Batch(deleteBranchesCmd(selected, m.dryRun), m.spinner.Tick)
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateBrowsing
 	}
@@ -374,13 +374,22 @@ func (m model) cursorBranch() (Branch, bool) {
 	return Branch{}, false
 }
 
-// selectedNames returns selected branches in list order (maps are unordered in Go).
-func (m model) selectedNames() []string {
-	var names []string
+// selectedBranches returns selected branches in list order (maps are
+// unordered in Go).
+func (m model) selectedBranches() []Branch {
+	var selected []Branch
 	for _, b := range m.branches {
 		if m.selected[b.Name] {
-			names = append(names, b.Name)
+			selected = append(selected, b)
 		}
+	}
+	return selected
+}
+
+func (m model) selectedNames() []string {
+	var names []string
+	for _, b := range m.selectedBranches() {
+		names = append(names, b.Name)
 	}
 	return names
 }
