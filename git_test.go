@@ -1,9 +1,11 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -305,5 +307,49 @@ func TestLoadBranchesWithOddWorktreePath(t *testing.T) {
 	}
 	if review.Author != "Test" {
 		t.Errorf("fields after the path are misaligned: Author = %q", review.Author)
+	}
+}
+
+func TestLoadBranchesWithTagNamedLikeBranches(t *testing.T) {
+	newTestRepo(t, "v1")
+	mustGit(t, "tag", "v1") // same name as a branch
+	// A tag named like the base branch, on a commit that isn't in the branch.
+	mustGit(t, "switch", "-q", "-c", "side")
+	mustGit(t, "commit", "-q", "--allow-empty", "-m", "side")
+	mustGit(t, "tag", "main")
+	mustGit(t, "branch", "only-in-tag")
+
+	base, branches, err := loadBranches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := make(map[string]Branch)
+	for _, b := range branches {
+		byName[b.Name] = b
+	}
+	if base != "main" {
+		t.Errorf("base = %q, want main", base)
+	}
+	if _, ok := byName["main"]; !ok {
+		t.Fatalf("main is missing; names were shortened to avoid the tag: %v", slices.Collect(maps.Keys(byName)))
+	}
+	if !byName["main"].Protected(base) {
+		t.Error("the base branch must stay protected when a tag shares its name")
+	}
+	if byName["only-in-tag"].Merged {
+		t.Error("only-in-tag is merged into the tag main, not the branch main")
+	}
+	if results := deleteBranches([]string{"v1"}); results[0].Err != nil {
+		t.Errorf("a branch that shares a tag's name should be deletable: %v", results[0].Err)
+	}
+}
+
+func TestBaseBranchFromOriginHeadWhenAmbiguous(t *testing.T) {
+	newTestRepo(t, "trunk", "origin/trunk") // local branch named like the remote one
+	mustGit(t, "update-ref", "refs/remotes/origin/trunk", "HEAD")
+	mustGit(t, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/trunk")
+
+	if got := baseBranch(); got != "trunk" {
+		t.Errorf("baseBranch = %q, want trunk (origin's default branch)", got)
 	}
 }

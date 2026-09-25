@@ -65,8 +65,11 @@ func git(args ...string) (string, error) {
 }
 
 // branchFields are the for-each-ref fields read for each branch, in order.
+// The name uses lstrip=2 (drop "refs/heads/") rather than :short, which
+// shortens only as far as stays unambiguous: with a tag also named "main",
+// :short gives "heads/main".
 var branchFields = []string{
-	"%(refname:short)",
+	"%(refname:lstrip=2)",
 	"%(committerdate:relative)",
 	"%(committerdate:unix)",
 	"%(HEAD)",
@@ -116,8 +119,9 @@ func parseBranches(out string) []Branch {
 // then main or master, then whatever is checked out.
 func baseBranch() string {
 	var candidates []string
-	if ref, err := git("symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {
-		candidates = append(candidates, strings.TrimPrefix(ref, "origin/"))
+	// Full ref names throughout: short names can be ambiguous (see branchFields).
+	if ref, err := git("symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"); err == nil {
+		candidates = append(candidates, strings.TrimPrefix(ref, "refs/remotes/origin/"))
 	}
 	candidates = append(candidates, "main", "master")
 
@@ -144,7 +148,7 @@ func loadBranches() (base string, branches []Branch, err error) {
 		return "", branches, nil
 	}
 
-	merged, err := git("branch", "--merged", base, "--format=%(refname:short)")
+	merged, err := git("branch", "--merged", "refs/heads/"+base, "--format=%(refname:lstrip=2)")
 	if err != nil {
 		return "", nil, err
 	}
