@@ -185,13 +185,14 @@ go test ./...
 go vet ./...
 ```
 
-| File | Contents |
+| Path | Contents |
 | --- | --- |
-| `main.go` | Starts the program and prints restore commands on exit |
-| `model.go` | Bubble Tea model: state, messages, commands, and derived state like the visible list |
-| `update.go` | `Update`: how key presses and messages change the state |
-| `view.go` | `View`: rendering the list, header, footer, and confirm screen |
-| `sort.go` | Sort orders |
-| `git.go` | Runs git commands and parses their output |
-| `keys.go` | Key bindings and help text |
-| `styles.go` | Lip Gloss styles |
+| `main.go` | Entry point; calls `cmd.Execute` |
+| `cmd/root.go` | Flags, running the UI, and the summary printed on exit |
+| `internal/git/` | Everything that runs git: loading branches (`load.go`), protection rules (`branch.go`), rebase and bisect detection (`inprogress.go`), deleting (`delete.go`), and restore commands (`restore.go`) |
+| `internal/tui/` | The Bubble Tea UI: state (`model.go`), key handling (`update.go`), rendering (`view.go`, `list.go`, `confirm.go`), sorting, keys, and styles |
+| `internal/testrepo/` | Throwaway git repos for tests |
+| `scripts/demo-repo.sh` | Builds a demo repo to try the tool on |
+
+Tests sit next to the code they test, and most git tests run against real
+temporary repositories.
