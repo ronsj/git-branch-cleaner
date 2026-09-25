@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime/debug"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ronsj/git-branch-cleaner/internal/git"
@@ -29,6 +30,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	dryRun := flags.Bool("dry-run", false, "show what would be deleted without deleting anything")
 	olderThan := flags.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
 	base := flags.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
+	showVersion := flags.Bool("version", false, "print the version and exit")
 	flags.Usage = func() {
 		fmt.Fprintf(flags.Output(), "Usage: git-branch-cleaner [flags]\n\n")
 		fmt.Fprintf(flags.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
@@ -40,6 +42,10 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return 0
 		}
 		return 2
+	}
+	if *showVersion {
+		fmt.Fprintln(stdout, "git-branch-cleaner version", version())
+		return 0
 	}
 	if flags.NArg() > 0 {
 		fmt.Fprintf(stderr, "unexpected argument: %s\n\n", flags.Arg(0))
@@ -63,6 +69,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+// version is the version Go recorded when building the binary: the module
+// version for `go install ...@version`, or one derived from the git commit
+// for a local build (with "+dirty" if there were uncommitted changes).
+func version() string {
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
+		return info.Main.Version
+	}
+	return "(unknown)"
 }
 
 // printHistory prints what was deleted, with restore commands, and what

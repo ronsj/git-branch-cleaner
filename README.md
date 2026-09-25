@@ -81,6 +81,7 @@ your terminal are cut off with `…`.
 | `--dry-run` | Show what would be deleted without deleting anything |
 | `--older-than N` | Hide branches whose last commit is less than `N` days old |
 | `--base branch` | Compare against `branch` instead of detecting the base branch |
+| `--version` | Print the version and exit |
 
 With `--dry-run`, the whole UI works the same, with a **DRY RUN** badge in the
 title. Confirming a delete lists each branch and the commit it points to

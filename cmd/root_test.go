@@ -78,3 +78,13 @@ func TestRunTwice(t *testing.T) {
 		}
 	}
 }
+
+func TestRunVersion(t *testing.T) {
+	var stdout, stderr strings.Builder
+	if status := run([]string{"--version"}, &stdout, &stderr); status != 0 {
+		t.Fatalf("status = %d, stderr = %q", status, stderr.String())
+	}
+	if !strings.HasPrefix(stdout.String(), "git-branch-cleaner version ") {
+		t.Errorf("stdout = %q", stdout.String())
+	}
+}
