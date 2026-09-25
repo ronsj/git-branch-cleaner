@@ -413,3 +413,11 @@ func TestWorktreeTag(t *testing.T) {
 		t.Errorf("the current branch's own worktree shouldn't be labeled: %q", tags)
 	}
 }
+
+func TestInProgressTag(t *testing.T) {
+	m := loadedModel()
+	b := Branch{Name: "feature", InProgress: "rebasing"}
+	if tags := m.renderTags(b); !strings.Contains(tags, "rebasing") {
+		t.Errorf("tags = %q, want a rebasing label", tags)
+	}
+}

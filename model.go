@@ -616,6 +616,9 @@ func (m model) renderTags(b Branch) string {
 	if b.InOtherWorktree() {
 		tags = append(tags, mutedStyle.Render("worktree"))
 	}
+	if b.InProgress != "" {
+		tags = append(tags, mutedStyle.Render(b.InProgress))
+	}
 	if b.Merged && !b.Protected(m.base) {
 		tags = append(tags, mergedStyle.Render("merged"))
 	}

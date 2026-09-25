@@ -158,6 +158,8 @@ func TestProtected(t *testing.T) {
 		{"base branch", Branch{Name: "main"}, true},
 		{"current branch", Branch{Name: "wip", Current: true, Worktree: "/work/app"}, true},
 		{"in another worktree", Branch{Name: "review", Worktree: "/work/review"}, true},
+		{"mid-rebase", Branch{Name: "feature", InProgress: "rebasing"}, true},
+		{"mid-bisect", Branch{Name: "feature", InProgress: "bisecting"}, true},
 	}
 	for _, tt := range tests {
 		if got := tt.branch.Protected("main"); got != tt.want {
@@ -194,5 +196,80 @@ func TestLoadBranchesDetectsOtherWorktrees(t *testing.T) {
 	// The protection matches git's own rule: it refuses this delete.
 	if results := deleteBranches([]string{"review"}); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch checked out in a worktree")
+	}
+}
+
+// commitFile changes a file in dir and commits it, giving rebase and bisect
+// real commits to work through.
+func commitFile(t *testing.T, dir, message string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "file.txt"), []byte(message), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit(t, "-C", dir, "add", "file.txt")
+	mustGit(t, "-C", dir, "commit", "-q", "-m", message)
+}
+
+func loadBranch(t *testing.T, name string) Branch {
+	t.Helper()
+	_, branches, err := loadBranches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range branches {
+		if b.Name == name {
+			return b
+		}
+	}
+	t.Fatalf("branch %q not found", name)
+	return Branch{}
+}
+
+func TestLoadBranchesDetectsRebaseInProgress(t *testing.T) {
+	newTestRepo(t)
+	mustGit(t, "switch", "-q", "-c", "feature")
+	commitFile(t, ".", "one")
+	// Stop the rebase at its first commit, like pausing to fix a conflict.
+	t.Setenv("GIT_SEQUENCE_EDITOR", "sed -i.bak s/^pick/edit/")
+	mustGit(t, "rebase", "-q", "-i", "HEAD~1")
+
+	// From a subdirectory, git reports the git directory as a relative path.
+	sub := filepath.Join("src", "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(sub)
+
+	feature := loadBranch(t, "feature")
+	if feature.InProgress != "rebasing" || !feature.Protected("main") {
+		t.Errorf("feature = %+v, want protected and marked rebasing", feature)
+	}
+	if results := deleteBranches([]string{"feature"}); results[0].Err == nil {
+		t.Error("expected git to refuse deleting a branch that's being rebased")
+	}
+}
+
+func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
+	newTestRepo(t, "feature")
+	wt := filepath.Join(t.TempDir(), "bisect-wt")
+	mustGit(t, "worktree", "add", "-q", wt, "feature")
+	for _, message := range []string{"one", "two", "three", "four"} {
+		commitFile(t, wt, message)
+	}
+	mustGit(t, "-C", wt, "bisect", "start")
+	mustGit(t, "-C", wt, "bisect", "bad")
+	mustGit(t, "-C", wt, "bisect", "good", "HEAD~4")
+
+	feature := loadBranch(t, "feature")
+	// This is why the state files are needed: bisect detached the worktree's
+	// HEAD, so git no longer reports the branch as checked out there.
+	if feature.Worktree != "" {
+		t.Fatalf("test setup: expected bisect to detach HEAD, but Worktree = %q", feature.Worktree)
+	}
+	if feature.InProgress != "bisecting" || !feature.Protected("main") {
+		t.Errorf("feature = %+v, want protected and marked bisecting", feature)
+	}
+	if results := deleteBranches([]string{"feature"}); results[0].Err == nil {
+		t.Error("expected git to refuse deleting a branch that's being bisected")
 	}
 }

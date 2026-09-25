@@ -130,7 +130,8 @@ lists every selected branch, hidden or not.
 | `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches show up this way, because git doesn't see their commits in the base branch. |
 | `current` | The branch you have checked out. It can't be selected. |
 | `base` | The branch everything is compared against. It can't be selected. |
-| `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it there, so it can't be selected. |
+| `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it, so it can't be selected. |
+| `rebasing` / `bisecting` | A rebase or bisect in some worktree is using the branch. Git won't delete it until that finishes, so it can't be selected. |
 
 The base branch is the remote's default branch (`origin/HEAD`) if it exists
 locally, otherwise `main`, then `master`, then whatever is checked out.
