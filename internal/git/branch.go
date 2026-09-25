@@ -33,5 +33,21 @@ func (b Branch) IsBase(base string) bool {
 
 // Protected reports whether the UI should refuse to delete this branch.
 func (b Branch) Protected(base string) bool {
-	return b.Current || b.IsBase(base) || b.InOtherWorktree() || b.InProgress != ""
+	return b.ProtectedReason(base) != ""
+}
+
+// ProtectedReason says why the branch is protected, finishing a sentence
+// like "Can't delete x: ...", or returns "" if it isn't.
+func (b Branch) ProtectedReason(base string) string {
+	switch {
+	case b.IsBase(base):
+		return "it's the base branch"
+	case b.Current:
+		return "it's checked out"
+	case b.InOtherWorktree():
+		return "it's checked out in another worktree"
+	case b.InProgress != "":
+		return "it's in use (" + b.InProgress + ")"
+	}
+	return ""
 }

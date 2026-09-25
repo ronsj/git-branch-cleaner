@@ -43,3 +43,21 @@ func TestIsBase(t *testing.T) {
 		}
 	}
 }
+
+func TestProtectedReason(t *testing.T) {
+	tests := []struct {
+		branch Branch
+		want   string
+	}{
+		{Branch{Name: "feature"}, ""},
+		{Branch{Name: "main", Current: true}, "it's the base branch"},
+		{Branch{Name: "wip", Current: true, Worktree: "/work/app"}, "it's checked out"},
+		{Branch{Name: "review", Worktree: "/work/review"}, "it's checked out in another worktree"},
+		{Branch{Name: "feature", InProgress: "rebasing"}, "it's in use (rebasing)"},
+	}
+	for _, tt := range tests {
+		if got := tt.branch.ProtectedReason("main"); got != tt.want {
+			t.Errorf("%s: ProtectedReason = %q, want %q", tt.branch.Name, got, tt.want)
+		}
+	}
+}
