@@ -34,6 +34,12 @@ func press(m model, keys ...string) model {
 			msg = tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 		case "enter":
 			msg = tea.KeyPressMsg{Code: tea.KeyEnter}
+		case "esc":
+			msg = tea.KeyPressMsg{Code: tea.KeyEscape}
+		case "up":
+			msg = tea.KeyPressMsg{Code: tea.KeyUp}
+		case "down":
+			msg = tea.KeyPressMsg{Code: tea.KeyDown}
 		default:
 			msg = tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 		}
@@ -120,5 +126,92 @@ func TestRowsFitTerminalWidth(t *testing.T) {
 		if w := lipgloss.Width(line); w > 60 {
 			t.Errorf("line is %d cells wide, terminal is 60: %q", w, line)
 		}
+	}
+}
+
+// typeText presses each character of text as its own key.
+func typeText(m model, text string) model {
+	for _, r := range text {
+		m = press(m, string(r))
+	}
+	return m
+}
+
+func visibleNames(m model) []string {
+	var names []string
+	for _, b := range m.visibleBranches() {
+		names = append(names, b.Name)
+	}
+	return names
+}
+
+func TestFilterNarrowsList(t *testing.T) {
+	m := typeText(press(loadedModel(), "/"), "FEAT")
+	want := []string{"merged-feature", "gone-feature"}
+	if got := visibleNames(m); !reflect.DeepEqual(got, want) {
+		t.Fatalf("visible %v, want %v", got, want)
+	}
+	if !m.filter.Focused() {
+		t.Fatal("filter should stay focused while typing")
+	}
+}
+
+func TestFilterCapturesShortcutKeys(t *testing.T) {
+	m := typeText(press(loadedModel(), "/"), "ja")
+	if m.filter.Value() != "ja" {
+		t.Fatalf("filter = %q, want the typed text", m.filter.Value())
+	}
+	if m.cursor != 0 || len(m.selectedNames()) != 0 {
+		t.Fatal("j and a should type into the filter, not move or select")
+	}
+}
+
+func TestArrowKeysMoveWhileFiltering(t *testing.T) {
+	m := press(typeText(press(loadedModel(), "/"), "feat"), "down")
+	if m.cursor != 1 || !m.filter.Focused() {
+		t.Fatalf("cursor = %d, focused = %v; want 1, true", m.cursor, m.filter.Focused())
+	}
+}
+
+func TestEnterKeepsFilterAndEscClearsIt(t *testing.T) {
+	m := press(typeText(press(loadedModel(), "/"), "feat"), "enter")
+	if m.filter.Focused() || len(m.visibleBranches()) != 2 {
+		t.Fatal("enter should leave the filter applied but stop typing")
+	}
+	if m.state != stateBrowsing {
+		t.Fatal("enter in the filter should not open the delete confirmation")
+	}
+
+	m = press(m, "esc")
+	if m.filter.Value() != "" || len(m.visibleBranches()) != 5 {
+		t.Fatal("esc should clear the filter")
+	}
+}
+
+func TestSelectStaleOnlySelectsVisible(t *testing.T) {
+	m := press(typeText(press(loadedModel(), "/"), "gone"), "enter", "a")
+	want := []string{"gone-feature"}
+	if got := m.selectedNames(); !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected %v, want %v", got, want)
+	}
+}
+
+func TestHiddenSelectionsAreCalledOut(t *testing.T) {
+	m := press(loadedModel(), "a") // selects merged-feature and gone-feature
+	m = press(typeText(press(m, "/"), "gone"), "enter")
+
+	if got := m.renderSelectionCount(); !strings.Contains(got, "2 selected (1 hidden by filter)") {
+		t.Fatalf("selection count = %q", got)
+	}
+	m = press(m, "enter")
+	if confirm := m.renderConfirm(); !strings.Contains(confirm, "merged-feature") {
+		t.Fatal("confirm screen should list selections hidden by the filter")
+	}
+}
+
+func TestToggleOnEmptyFilterResult(t *testing.T) {
+	m := press(typeText(press(loadedModel(), "/"), "nope"), "enter", "space")
+	if len(m.selectedNames()) != 0 {
+		t.Fatal("toggling with no visible branches should do nothing")
 	}
 }

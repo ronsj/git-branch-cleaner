@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -34,15 +35,16 @@ type (
 type model struct {
 	state    state
 	base     string
-	branches []Branch
+	branches []Branch // every local branch; see visibleBranches for the filtered list
 	selected map[string]bool
-	cursor   int
+	cursor   int // index into visibleBranches()
 	offset   int // index of the first visible row when the list scrolls
 	width    int
 	height   int
 
 	spinner spinner.Model
 	help    help.Model
+	filter  textinput.Model // focused while the user is typing a filter
 
 	lastResults []deleteResult // shown under the list after a delete
 	deleted     []deleteResult // everything deleted this session, printed on exit
@@ -50,11 +52,16 @@ type model struct {
 }
 
 func newModel() model {
+	filter := textinput.New()
+	filter.Prompt = "/ "
+	filter.Placeholder = "filter by name"
+
 	return model{
 		state:    stateLoading,
 		selected: make(map[string]bool),
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(selectedStyle)),
 		help:     help.New(),
+		filter:   filter,
 	}
 }
 
@@ -89,6 +96,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.BackgroundColorMsg:
 		m.help.Styles = help.DefaultStyles(msg.IsDark())
+		m.filter.SetStyles(textinput.DefaultStyles(msg.IsDark()))
 		return m, nil
 
 	case spinner.TickMsg:
@@ -101,8 +109,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case branchesLoadedMsg:
 		var cursorName string
-		if m.cursor < len(m.branches) {
-			cursorName = m.branches[m.cursor].Name
+		if b, ok := m.cursorBranch(); ok {
+			cursorName = b.Name
 		}
 		m.state = stateBrowsing
 		m.base = msg.base
@@ -110,15 +118,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.err = nil
 		// Drop selections for branches that no longer exist.
 		for name := range m.selected {
-			if m.indexOf(name) < 0 {
+			if indexOf(m.branches, name) < 0 {
 				delete(m.selected, name)
 			}
 		}
-		// Keep the cursor on the same branch if it still exists.
-		if i := m.indexOf(cursorName); i >= 0 {
+		// Keep the cursor on the same branch if it's still visible.
+		visible := m.visibleBranches()
+		if i := indexOf(visible, cursorName); i >= 0 {
 			m.cursor = i
 		} else {
-			m.cursor = min(m.cursor, max(len(m.branches)-1, 0))
+			m.cursor = min(m.cursor, max(len(visible)-1, 0))
 		}
 		m.scrollToCursor()
 		return m, nil
@@ -138,14 +147,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-		switch m.state {
-		case stateBrowsing:
+		switch {
+		case m.state == stateBrowsing && m.filter.Focused():
+			return m.updateFiltering(msg)
+		case m.state == stateBrowsing:
 			return m.updateBrowsing(msg)
-		case stateConfirming:
+		case m.state == stateConfirming:
 			return m.updateConfirming(msg)
 		}
+		return m, nil
 	}
-	return m, nil
+
+	// Anything else (like the text cursor's blink timer) belongs to the filter input.
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	return m, cmd
 }
 
 func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -158,19 +174,16 @@ func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case key.Matches(msg, keys.Down):
-		if m.cursor < len(m.branches)-1 {
+		if m.cursor < len(m.visibleBranches())-1 {
 			m.cursor++
 		}
 
 	case key.Matches(msg, keys.Toggle):
-		if m.cursor < len(m.branches) {
-			b := m.branches[m.cursor]
-			if !b.Protected(m.base) {
-				m.selected[b.Name] = !m.selected[b.Name]
-			}
+		if b, ok := m.cursorBranch(); ok && !b.Protected(m.base) {
+			m.selected[b.Name] = !m.selected[b.Name]
 		}
 	case key.Matches(msg, keys.SelectStale):
-		for _, b := range m.branches {
+		for _, b := range m.visibleBranches() {
 			if (b.Merged || b.Gone) && !b.Protected(m.base) {
 				m.selected[b.Name] = true
 			}
@@ -188,10 +201,45 @@ func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(loadBranchesCmd, m.spinner.Tick)
 	case key.Matches(msg, keys.Help):
 		m.help.ShowAll = !m.help.ShowAll
+
+	case key.Matches(msg, keys.Filter):
+		return m, m.filter.Focus()
+	case key.Matches(msg, keys.ClearFilter):
+		m.setFilter("")
 	}
 
 	m.scrollToCursor()
 	return m, nil
+}
+
+// updateFiltering handles keys while the filter input is focused. Letters go
+// to the input, so j/k type instead of moving; the arrow keys still move.
+func (m model) updateFiltering(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "enter":
+		m.filter.Blur()
+		return m, nil
+	case "esc":
+		m.filter.Blur()
+		m.setFilter("")
+		return m, nil
+	case "up", "down":
+		return m.updateBrowsing(msg)
+	}
+
+	before := m.filter.Value()
+	var cmd tea.Cmd
+	m.filter, cmd = m.filter.Update(msg)
+	if m.filter.Value() != before {
+		m.cursor, m.offset = 0, 0
+	}
+	return m, cmd
+}
+
+// setFilter replaces the filter text and moves the cursor back to the top.
+func (m *model) setFilter(value string) {
+	m.filter.SetValue(value)
+	m.cursor, m.offset = 0, 0
 }
 
 func (m model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -211,6 +259,31 @@ func (m model) busy() bool {
 	return m.state == stateLoading || m.state == stateDeleting
 }
 
+// visibleBranches returns the branches whose names match the filter,
+// case-insensitively. With no filter, that's all of them.
+func (m model) visibleBranches() []Branch {
+	query := strings.ToLower(strings.TrimSpace(m.filter.Value()))
+	if query == "" {
+		return m.branches
+	}
+	var visible []Branch
+	for _, b := range m.branches {
+		if strings.Contains(strings.ToLower(b.Name), query) {
+			visible = append(visible, b)
+		}
+	}
+	return visible
+}
+
+// cursorBranch returns the branch under the cursor, if the list isn't empty.
+func (m model) cursorBranch() (Branch, bool) {
+	visible := m.visibleBranches()
+	if m.cursor < len(visible) {
+		return visible[m.cursor], true
+	}
+	return Branch{}, false
+}
+
 // selectedNames returns selected branches in list order (maps are unordered in Go).
 func (m model) selectedNames() []string {
 	var names []string
@@ -222,8 +295,8 @@ func (m model) selectedNames() []string {
 	return names
 }
 
-func (m model) indexOf(name string) int {
-	for i, b := range m.branches {
+func indexOf(branches []Branch, name string) int {
+	for i, b := range branches {
 		if b.Name == name {
 			return i
 		}
@@ -235,7 +308,7 @@ func (m model) indexOf(name string) int {
 // footer, and help.
 func (m model) listHeight() int {
 	if m.height == 0 {
-		return len(m.branches) // size unknown yet: show everything
+		return len(m.visibleBranches()) // size unknown yet: show everything
 	}
 	chrome := 8 + len(m.lastResults)
 	if m.help.ShowAll {
@@ -254,7 +327,7 @@ func (m *model) scrollToCursor() {
 	if m.cursor >= m.offset+rows {
 		m.offset = m.cursor - rows + 1
 	}
-	m.offset = max(0, min(m.offset, len(m.branches)-rows))
+	m.offset = max(0, min(m.offset, len(m.visibleBranches())-rows))
 }
 
 func (m model) View() tea.View {
@@ -271,7 +344,12 @@ func (m model) render() string {
 	if m.base != "" {
 		s.WriteString(mutedStyle.Render("  base: " + m.base))
 	}
-	s.WriteString("\n\n")
+	s.WriteString("\n")
+	// The filter takes the blank line under the title, so the list doesn't jump.
+	if m.state == stateBrowsing && (m.filter.Focused() || m.filter.Value() != "") {
+		s.WriteString(m.filter.View())
+	}
+	s.WriteString("\n")
 
 	if m.err != nil {
 		s.WriteString(errorStyle.Render("Error: "+m.err.Error()) + "\n\n")
@@ -291,9 +369,12 @@ func (m model) render() string {
 		return s.String()
 	}
 
-	if len(m.branches) == 0 {
+	switch {
+	case len(m.branches) == 0:
 		s.WriteString(mutedStyle.Render("No local branches found.") + "\n")
-	} else {
+	case len(m.visibleBranches()) == 0:
+		s.WriteString(mutedStyle.Render(fmt.Sprintf("No branches match %q.", m.filter.Value())) + "\n")
+	default:
 		s.WriteString(m.renderList())
 	}
 
@@ -306,13 +387,37 @@ func (m model) render() string {
 		}
 	}
 
-	if n := len(m.selectedNames()); n > 0 {
-		s.WriteString(selectedStyle.Render(fmt.Sprintf("%d selected", n)) + "\n")
+	s.WriteString(m.renderSelectionCount() + "\n")
+
+	if m.filter.Focused() {
+		s.WriteString(mutedStyle.Render("type to filter • ↑/↓ move • enter done • esc clear"))
 	} else {
-		s.WriteString("\n")
+		k := keys
+		k.ClearFilter.SetEnabled(m.filter.Value() != "")
+		s.WriteString(m.help.View(k))
 	}
-	s.WriteString(m.help.View(keys))
 	return s.String()
+}
+
+// renderSelectionCount shows how many branches are selected, calling out any
+// the filter is hiding so they aren't deleted by surprise.
+func (m model) renderSelectionCount() string {
+	selected := m.selectedNames()
+	if len(selected) == 0 {
+		return ""
+	}
+	visible := m.visibleBranches()
+	hidden := 0
+	for _, name := range selected {
+		if indexOf(visible, name) < 0 {
+			hidden++
+		}
+	}
+	text := fmt.Sprintf("%d selected", len(selected))
+	if hidden > 0 {
+		text += fmt.Sprintf(" (%d hidden by filter)", hidden)
+	}
+	return selectedStyle.Render(text)
 }
 
 // maxAuthorWidth caps the author column so one long name can't crowd out subjects.
@@ -329,14 +434,15 @@ func (m model) renderList() string {
 	}
 	authorWidth = min(authorWidth, maxAuthorWidth)
 
+	visible := m.visibleBranches()
 	var s strings.Builder
-	end := min(m.offset+m.listHeight(), len(m.branches))
+	end := min(m.offset+m.listHeight(), len(visible))
 	if m.offset > 0 {
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("  ↑ %d more", m.offset)) + "\n")
 	}
 
 	for i := m.offset; i < end; i++ {
-		b := m.branches[i]
+		b := visible[i]
 
 		pointer := "  "
 		if i == m.cursor {
@@ -372,7 +478,7 @@ func (m model) renderList() string {
 		s.WriteString(strings.TrimRight(row, " ") + "\n")
 	}
 
-	if rest := len(m.branches) - end; rest > 0 {
+	if rest := len(visible) - end; rest > 0 {
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("  ↓ %d more", rest)) + "\n")
 	}
 	return s.String()
@@ -408,7 +514,7 @@ func (m model) renderConfirm() string {
 
 	unmerged := 0
 	for _, name := range m.selectedNames() {
-		b := m.branches[m.indexOf(name)]
+		b := m.branches[indexOf(m.branches, name)]
 		line := "  " + name
 		if !b.Merged {
 			unmerged++

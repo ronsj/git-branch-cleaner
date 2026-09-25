@@ -8,14 +8,14 @@ A terminal UI for finding and deleting stale local git branches, built with
 ```
 Branch Cleaner  base: main
 
-  [x] chore/deps          3 weeks ago     merged
-> [ ] experiment/new-nav  2 weeks ago
-  [x] feature/login       6 days ago      merged
-  [x] fix/header-typo     2 days ago      gone
-   -  main                5 minutes ago   current base
+  [x] chore/deps          3 weeks ago    merged        Alex Kim         Bump dependencies
+> [ ] experiment/new-nav  2 weeks ago                  Priya Natarajan  Try a sidebar layout for th…
+  [x] feature/login       6 days ago     merged        Alex Kim         Add login form with email v…
+  [x] fix/header-typo     2 days ago     gone          Sam Lee          Fix typo in header
+   -  main                5 minutes ago  current base  Ronald San Jose  Merge chore/deps
 
 3 selected
-space toggle • a select merged/gone • enter delete selected • ? more • q quit
+space toggle • a select merged/gone • enter delete • / filter • ? more • q quit
 ```
 
 ## Requirements
@@ -66,7 +66,9 @@ cd path/to/your/repo
 branch-cleaner
 ```
 
-Branches are listed oldest first, so the stalest ones are at the top.
+Branches are listed oldest first, so the stalest ones are at the top. Each row
+shows the branch's last commit: when it was made, who wrote it, and its
+message. Rows that don't fit your terminal are cut off with `…`.
 
 ### Keys
 
@@ -76,12 +78,26 @@ Branches are listed oldest first, so the stalest ones are at the top.
 | `space` / `x` | Select or deselect the branch under the cursor |
 | `a` | Select every branch marked `merged` or `gone` |
 | `n` | Clear the selection |
+| `/` | Filter branches by name |
+| `esc` | Clear the filter |
 | `enter` / `d` | Delete the selected branches (asks for confirmation) |
 | `r` | Reload the branch list |
 | `?` | Show all keys |
 | `q` / `ctrl+c` | Quit |
 
 On the confirmation screen, press `y` to delete or `n` / `esc` to go back.
+
+### Filtering
+
+Press `/` and type to show only branches whose names contain that text
+(case-insensitive). While you're typing, letter keys go into the filter, so use
+`↑` / `↓` to move. Press `enter` to keep the filter and get your shortcuts
+back, or `esc` to clear it.
+
+With a filter applied, `a` only selects matching branches. Branches you
+selected before filtering stay selected; the footer shows how many are hidden
+(for example `3 selected (1 hidden by filter)`), and the confirmation screen
+lists every selected branch, hidden or not.
 
 ### Labels
 
