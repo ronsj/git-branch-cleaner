@@ -135,10 +135,19 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, keys.SelectStale):
 		m.selected = maps.Clone(m.selected)
+		found := false
 		for _, b := range m.visibleBranches() {
 			if (b.Merged || b.Gone) && !b.Protected(m.base) {
 				m.selected[b.Name] = true
+				found = true
 			}
+		}
+		// Otherwise nothing changes on screen and the key seems broken.
+		switch {
+		case !found && m.filter.Value() != "":
+			m.notice = "No merged or gone branches match the filter"
+		case !found:
+			m.notice = "No merged or gone branches to select"
 		}
 	case key.Matches(msg, keys.SelectNone):
 		m.selected = make(map[string]bool)
