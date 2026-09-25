@@ -110,16 +110,17 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 	} else {
 		base = baseOverride
 	}
-	if base == "" {
-		return "", branches, nil
-	}
-
-	isMerged, err := mergedInto(base)
-	if err != nil {
-		return "", nil, err
-	}
-	for i := range branches {
-		branches[i].Merged = isMerged[branches[i].Name]
+	// With no base (a detached HEAD and no main or master), nothing counts as
+	// merged, but rebases and bisects still need to be found: a rebase is
+	// exactly what detaches HEAD.
+	if base != "" {
+		isMerged, err := mergedInto(base)
+		if err != nil {
+			return "", nil, err
+		}
+		for i := range branches {
+			branches[i].Merged = isMerged[branches[i].Name]
+		}
 	}
 
 	inProgress, err := branchesInProgress()

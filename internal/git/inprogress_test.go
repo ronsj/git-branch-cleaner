@@ -58,3 +58,25 @@ func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
 		t.Error("expected git to refuse deleting a branch that's being bisected")
 	}
 }
+
+// A rebase detaches HEAD, so in a repo without main or master there's no base
+// branch to fall back to. The rebase must still be found.
+func TestLoadBranchesDetectsRebaseWithoutBase(t *testing.T) {
+	testrepo.New(t)
+	testrepo.Git(t, "branch", "-m", "main", "trunk")
+	testrepo.Git(t, "switch", "-q", "-c", "feature")
+	testrepo.CommitFile(t, ".", "one")
+	t.Setenv("GIT_SEQUENCE_EDITOR", "sed -i.bak s/^pick/edit/")
+	testrepo.Git(t, "rebase", "-q", "-i", "HEAD~1")
+
+	base, _, err := LoadBranches("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base != "" {
+		t.Fatalf("test setup: expected no base branch, got %q", base)
+	}
+	if feature := loadBranch(t, "feature"); feature.InProgress != "rebasing" || !feature.Protected(base) {
+		t.Errorf("feature = %+v, want protected and marked rebasing", feature)
+	}
+}
