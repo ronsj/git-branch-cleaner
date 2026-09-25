@@ -76,6 +76,7 @@ your terminal are cut off with `…`.
 | --- | --- |
 | `--dry-run` | Show what would be deleted without deleting anything |
 | `--older-than N` | Hide branches whose last commit is less than `N` days old |
+| `--base branch` | Compare against `branch` instead of detecting the base branch |
 
 With `--dry-run`, the whole UI works the same, with a **DRY RUN** badge in the
 title. Confirming a delete lists each branch and the commit it points to
@@ -133,7 +134,9 @@ lists every selected branch, hidden or not.
 | `rebasing` / `bisecting` | A rebase or bisect in some worktree is using the branch. Git won't delete it until that finishes, so it can't be selected. |
 
 The base branch is the remote's default branch (`origin/HEAD`) if it exists
-locally, otherwise `main`, then `master`, then whatever is checked out.
+locally, otherwise `main`, then `master`, then whatever is checked out. If your
+repo's main line has another name, such as `develop`, pass it with
+`--base develop`.
 
 The `gone` label depends on your local copy of the remote. Run
 `git fetch --prune` first so branches deleted on the remote are detected.

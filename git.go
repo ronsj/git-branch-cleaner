@@ -163,16 +163,23 @@ func baseBranch() string {
 	return current
 }
 
-// loadBranches lists local branches and marks which are merged into base.
+// loadBranches lists local branches and marks which are merged into the base
+// branch: baseOverride if set (--base), otherwise a guess (see baseBranch).
 // The UI decides the order (see sortBranches).
-func loadBranches() (base string, branches []Branch, err error) {
+func loadBranches(baseOverride string) (base string, branches []Branch, err error) {
 	out, err := git("for-each-ref", "--format="+branchFormat, "refs/heads/")
 	if err != nil {
 		return "", nil, err
 	}
 	branches = parseBranches(out)
 
-	base = baseBranch()
+	if baseOverride == "" {
+		base = baseBranch()
+	} else if _, err := git("rev-parse", "--verify", "--quiet", "refs/heads/"+baseOverride); err != nil {
+		return "", nil, fmt.Errorf("base branch %q doesn't exist", baseOverride)
+	} else {
+		base = baseOverride
+	}
 	if base == "" {
 		return "", branches, nil
 	}

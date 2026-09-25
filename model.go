@@ -81,8 +81,9 @@ func sortBranches(branches []Branch, order sortOrder) []Branch {
 
 // options are the settings chosen on the command line.
 type options struct {
-	dryRun        bool // preview deletions instead of running them
-	olderThanDays int  // hide branches with commits newer than this; 0 shows all
+	dryRun        bool   // preview deletions instead of running them
+	olderThanDays int    // hide branches with commits newer than this; 0 shows all
+	baseOverride  string // compare against this branch; "" detects it
 }
 
 type model struct {
@@ -124,12 +125,15 @@ func newModel(opts options) model {
 
 // Commands run off the UI loop; whatever they return is sent to Update.
 
-func loadBranchesCmd() tea.Msg {
-	base, branches, err := loadBranches()
-	if err != nil {
-		return errMsg{err}
+func (m model) loadBranchesCmd() tea.Cmd {
+	baseOverride := m.baseOverride // captured: the command runs in the background
+	return func() tea.Msg {
+		base, branches, err := loadBranches(baseOverride)
+		if err != nil {
+			return errMsg{err}
+		}
+		return branchesLoadedMsg{base, branches}
 	}
-	return branchesLoadedMsg{base, branches}
 }
 
 func deleteBranchesCmd(branches []Branch, base string, dryRun bool) tea.Cmd {
@@ -142,7 +146,7 @@ func deleteBranchesCmd(branches []Branch, base string, dryRun bool) tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(loadBranchesCmd, m.spinner.Tick, tea.RequestBackgroundColor)
+	return tea.Batch(m.loadBranchesCmd(), m.spinner.Tick, tea.RequestBackgroundColor)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -195,7 +199,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 		m.state = stateLoading
-		return m, loadBranchesCmd
+		return m, m.loadBranchesCmd()
 
 	case errMsg:
 		m.err = msg.err
@@ -268,7 +272,7 @@ func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Refresh):
 		m.state = stateLoading
 		m.lastResults = nil
-		return m, tea.Batch(loadBranchesCmd, m.spinner.Tick)
+		return m, tea.Batch(m.loadBranchesCmd(), m.spinner.Tick)
 	case key.Matches(msg, keys.Help):
 		m.help.ShowAll = !m.help.ShowAll
 

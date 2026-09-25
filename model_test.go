@@ -248,8 +248,9 @@ func runCmd(cmd tea.Cmd) []tea.Msg {
 // confirms deletion, returning the result message.
 func confirmDelete(t *testing.T, dryRun bool, name string) branchesDeletedMsg {
 	t.Helper()
-	next, _ := newModel(options{dryRun: dryRun}).Update(loadBranchesCmd())
-	m := next.(model)
+	m := newModel(options{dryRun: dryRun})
+	next, _ := m.Update(m.loadBranchesCmd()())
+	m = next.(model)
 	m.selected[name] = true
 	m = press(m, "enter")
 
@@ -543,5 +544,14 @@ func BenchmarkRender(b *testing.B) {
 				_ = m.render()
 			}
 		})
+	}
+}
+
+func TestBaseOverrideIsUsedWhenLoading(t *testing.T) {
+	newTestRepo(t, "develop")
+	m := newModel(options{baseOverride: "develop"})
+	loaded, ok := m.loadBranchesCmd()().(branchesLoadedMsg)
+	if !ok || loaded.base != "develop" {
+		t.Fatalf("loaded %+v, want base develop", loaded)
 	}
 }

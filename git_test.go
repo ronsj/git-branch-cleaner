@@ -133,7 +133,7 @@ func TestLoadBranches(t *testing.T) {
 	mustGit(t, "switch", "-q", "-c", "wip")
 	mustGit(t, "commit", "-q", "--allow-empty", "-m", "Work in progress")
 
-	base, branches, err := loadBranches()
+	base, branches, err := loadBranches("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +221,7 @@ func TestLoadBranchesDetectsOtherWorktrees(t *testing.T) {
 	wt := filepath.Join(t.TempDir(), "review-wt")
 	mustGit(t, "worktree", "add", "-q", wt, "review")
 
-	_, branches, err := loadBranches()
+	_, branches, err := loadBranches("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func commitFile(t *testing.T, dir, message string) {
 // branchesNamed loads the named branches from the test repo.
 func branchesNamed(t *testing.T, names ...string) []Branch {
 	t.Helper()
-	_, all, err := loadBranches()
+	_, all, err := loadBranches("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func branchesNamed(t *testing.T, names ...string) []Branch {
 
 func loadBranch(t *testing.T, name string) Branch {
 	t.Helper()
-	_, branches, err := loadBranches()
+	_, branches, err := loadBranches("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -364,7 +364,7 @@ func TestLoadBranchesWithTagNamedLikeBranches(t *testing.T) {
 	mustGit(t, "tag", "main")
 	mustGit(t, "branch", "only-in-tag")
 
-	base, branches, err := loadBranches()
+	base, branches, err := loadBranches("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -500,5 +500,35 @@ func TestDeleteSkipsBranchNoLongerMerged(t *testing.T) {
 	}
 	if !branchExists("done") {
 		t.Fatal("a branch that stopped being merged must not be deleted without a warning")
+	}
+}
+
+func TestLoadBranchesWithBaseOverride(t *testing.T) {
+	newTestRepo(t)
+	mustGit(t, "switch", "-q", "-c", "develop")
+	commitFile(t, ".", "develop work")
+	mustGit(t, "branch", "done") // merged into develop, not main
+	mustGit(t, "switch", "-q", "main")
+
+	merged := func(base string) bool {
+		t.Helper()
+		gotBase, branches, err := loadBranches(base)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if base != "" && gotBase != base {
+			t.Fatalf("base = %q, want %q", gotBase, base)
+		}
+		return branches[indexOf(branches, "done")].Merged
+	}
+	if merged("") {
+		t.Error("without --base, done isn't merged into main")
+	}
+	if !merged("develop") {
+		t.Error("with --base develop, done is merged")
+	}
+
+	if _, _, err := loadBranches("no-such-branch"); err == nil || !strings.Contains(err.Error(), "doesn't exist") {
+		t.Errorf("err = %v, want a 'doesn't exist' error", err)
 	}
 }

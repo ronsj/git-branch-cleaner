@@ -11,6 +11,7 @@ import (
 func main() {
 	dryRun := flag.Bool("dry-run", false, "show what would be deleted without deleting anything")
 	olderThan := flag.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
+	base := flag.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: branch-cleaner [flags]\n\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
@@ -27,7 +28,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	opts := options{dryRun: *dryRun, olderThanDays: *olderThan}
+	opts := options{dryRun: *dryRun, olderThanDays: *olderThan, baseOverride: *base}
 	final, err := tea.NewProgram(newModel(opts)).Run()
 	// Run returns the last model even when it fails, and branches may already
 	// have been deleted, so print the history before reporting the error.
