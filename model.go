@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/help"
@@ -521,13 +522,12 @@ func padRight(s string, width int) string {
 }
 
 func (m model) renderConfirm() string {
-	var s strings.Builder
+	heading, keyHint := "Delete these branches?", "y to delete • n/esc to cancel"
 	if m.dryRun {
-		s.WriteString("Preview deleting these branches?\n\n")
-	} else {
-		s.WriteString("Delete these branches?\n\n")
+		heading, keyHint = "Preview deleting these branches?", "y to preview • n/esc to cancel"
 	}
 
+	var list []string
 	unmerged := 0
 	for _, name := range m.selectedNames() {
 		b := m.branches[indexOf(m.branches, name)]
@@ -536,18 +536,41 @@ func (m model) renderConfirm() string {
 			unmerged++
 			line += warnStyle.Render("  not merged")
 		}
-		s.WriteString(line + "\n")
+		list = append(list, line)
 	}
+
+	var notes []string
 	if unmerged > 0 {
-		s.WriteString("\n" + warnStyle.Render(fmt.Sprintf(
+		notes = append(notes, warnStyle.Render(fmt.Sprintf(
 			"%d branch(es) are not merged into %s. Their commits will only be\nrecoverable via the SHA printed after deletion.", unmerged, m.base)))
-		s.WriteString("\n")
 	}
 	if m.dryRun {
-		s.WriteString("\n" + dryRunStyle.Render("Dry run: nothing will actually be deleted.") + "\n")
-		s.WriteString("\n" + mutedStyle.Render("y to preview • n/esc to cancel"))
-	} else {
-		s.WriteString("\n" + mutedStyle.Render("y to delete • n/esc to cancel"))
+		notes = append(notes, dryRunStyle.Render("Dry run: nothing will actually be deleted."))
 	}
-	return confirmBox.Render(s.String())
+	var footer []string
+	if len(notes) > 0 {
+		footer = append(append(footer, ""), notes...)
+	}
+	footer = append(footer, "", mutedStyle.Render(keyHint))
+
+	// Shorten the list, never the footer: the key hint must stay on screen.
+	if m.height > 0 {
+		// Title and blank line (2), box border (2), heading and blank line (2).
+		room := m.height - 6 - lipgloss.Height(strings.Join(footer, "\n"))
+		list = fitLines(list, max(room, 1))
+	}
+
+	body := heading + "\n\n" + strings.Join(list, "\n") + "\n" + strings.Join(footer, "\n")
+	return confirmBox.Render(body)
+}
+
+// fitLines returns lines unchanged if there are at most n, otherwise the first
+// n-1 followed by a summary of the rest.
+func fitLines(lines []string, n int) []string {
+	if len(lines) <= n {
+		return lines
+	}
+	// Clone so append can't write into the caller's slice.
+	shown := slices.Clone(lines[:n-1])
+	return append(shown, mutedStyle.Render(fmt.Sprintf("  …and %d more", len(lines)-len(shown))))
 }

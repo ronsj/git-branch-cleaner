@@ -24,5 +24,5 @@ var (
 	confirmBox = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accent).
-			Padding(1, 2)
+			Padding(0, 2)
 )

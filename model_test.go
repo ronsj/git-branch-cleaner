@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -280,5 +281,25 @@ func TestDryRunIsVisible(t *testing.T) {
 	m = press(m, "a", "enter")
 	if !strings.Contains(m.renderConfirm(), "nothing will actually be deleted") {
 		t.Error("confirm screen should say nothing will be deleted")
+	}
+}
+
+func TestConfirmFitsShortTerminal(t *testing.T) {
+	var branches []Branch
+	for i := range 30 {
+		branches = append(branches, Branch{Name: fmt.Sprintf("old-%02d", i), Merged: true})
+	}
+	next, _ := newModel(true).Update(branchesLoadedMsg{base: "main", branches: branches})
+	next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
+	m := press(next.(model), "a", "enter")
+
+	screen := m.render()
+	if h := lipgloss.Height(screen); h > 16 {
+		t.Errorf("confirm screen is %d lines tall, terminal is 16:\n%s", h, screen)
+	}
+	for _, want := range []string{"y to preview", "…and ", "nothing will actually be deleted"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("confirm screen is missing %q:\n%s", want, screen)
+		}
 	}
 }
