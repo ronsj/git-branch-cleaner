@@ -21,7 +21,7 @@ space toggle • a select merged/gone • enter delete • / filter • ? more �
 ## Requirements
 
 - Go 1.27.1 or newer
-- git
+- git 2.23 or newer
 
 ## Install
 
