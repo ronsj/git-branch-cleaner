@@ -35,10 +35,12 @@ func (m Model) renderConfirm() string {
 	switch {
 	case unmerged > 0 && m.base == "":
 		notes = append(notes, warnStyle.Render(fmt.Sprintf(
-			"%d branch(es) weren't checked for merges, since no base branch was\nfound (see --base). Their commits will only be recoverable via the\nSHA printed after deletion.", unmerged)))
+			"%s checked for merges, since no base branch was\nfound (see --base). Their commits will only be recoverable via the\nSHA printed after deletion.",
+			countBranches(unmerged, "wasn't", "weren't"))))
 	case unmerged > 0:
 		notes = append(notes, warnStyle.Render(fmt.Sprintf(
-			"%d branch(es) are not merged into %s. Their commits will only be\nrecoverable via the SHA printed after deletion.", unmerged, m.base)))
+			"%s not merged into %s. Their commits will only be\nrecoverable via the SHA printed after deletion.",
+			countBranches(unmerged, "is", "are"), m.base)))
 	}
 	if m.DryRun {
 		notes = append(notes, dryRunStyle.Render("Dry run: nothing will actually be deleted."))
@@ -58,4 +60,13 @@ func (m Model) renderConfirm() string {
 
 	body := heading + "\n\n" + strings.Join(list, "\n") + "\n" + strings.Join(footer, "\n")
 	return confirmBox.Render(body)
+}
+
+// countBranches starts a sentence about n branches: "1 branch is",
+// "3 branches are", with the verb given for each.
+func countBranches(n int, one, many string) string {
+	if n == 1 {
+		return "1 branch " + one
+	}
+	return fmt.Sprintf("%d branches %s", n, many)
 }
