@@ -619,7 +619,9 @@ func (m model) renderTags(b Branch) string {
 	if b.InProgress != "" {
 		tags = append(tags, mutedStyle.Render(b.InProgress))
 	}
-	if b.Merged && !b.Protected(m.base) {
+	// Shown even on protected branches: "worktree merged" says the branch can
+	// go once that worktree does. The base is always merged into itself.
+	if b.Merged && b.Name != m.base {
 		tags = append(tags, mergedStyle.Render("merged"))
 	}
 	if b.Gone {

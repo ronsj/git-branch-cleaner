@@ -126,7 +126,7 @@ lists every selected branch, hidden or not.
 
 | Label | Meaning |
 | --- | --- |
-| `merged` | Every commit on the branch is already in the base branch. Safe to delete. |
+| `merged` | Every commit on the branch is already in the base branch. Safe to delete. Also shown on branches that can't be selected yet, such as `worktree merged`: remove that worktree and the branch is safe to delete. |
 | `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches show up this way, because git doesn't see their commits in the base branch. |
 | `current` | The branch you have checked out. It can't be selected. |
 | `base` | The branch everything is compared against. It can't be selected. |

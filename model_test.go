@@ -421,3 +421,15 @@ func TestInProgressTag(t *testing.T) {
 		t.Errorf("tags = %q, want a rebasing label", tags)
 	}
 }
+
+func TestMergedShownOnProtectedBranches(t *testing.T) {
+	m := loadedModel()
+	inWorktree := Branch{Name: "release", Merged: true, Worktree: "/work/release"}
+	if tags := m.renderTags(inWorktree); !strings.Contains(tags, "worktree") || !strings.Contains(tags, "merged") {
+		t.Errorf("tags = %q, want both worktree and merged", tags)
+	}
+	base := Branch{Name: "main", Merged: true}
+	if tags := m.renderTags(base); strings.Contains(tags, "merged") {
+		t.Errorf("the base branch shouldn't be labeled merged: %q", tags)
+	}
+}
