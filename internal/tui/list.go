@@ -13,24 +13,39 @@ import (
 // maxAuthorWidth caps the author column so one long name can't crowd out subjects.
 const maxAuthorWidth = 20
 
-func (m Model) renderList() string {
-	// Ages are worked out on every render, so they stay current while the
-	// app is open.
-	now := time.Now()
+// columnWidths are the widths of the columns whose contents only change when
+// the branches are loaded. Each column is sized to its widest value across
+// every branch, so the columns line up and don't shift as the filter changes.
+type columnWidths struct {
+	name, tags, author int
+}
 
-	// Size each column to its widest value so the columns line up.
-	var nameWidth, dateWidth, tagWidth, authorWidth int
+// measureColumns measures every branch for columnWidths. That's the slowest
+// part of drawing a long list, so it's done once per load, not per draw.
+func (m Model) measureColumns() columnWidths {
+	var w columnWidths
 	for _, b := range m.branches {
-		nameWidth = max(nameWidth, lipgloss.Width(b.Name))
-		dateWidth = max(dateWidth, lipgloss.Width(relativeTime(b.CommitTime, now)))
-		tagWidth = max(tagWidth, lipgloss.Width(m.renderTags(b)))
-		authorWidth = max(authorWidth, lipgloss.Width(b.Author))
+		w.name = max(w.name, lipgloss.Width(b.Name))
+		w.tags = max(w.tags, lipgloss.Width(m.renderTags(b)))
+		w.author = max(w.author, lipgloss.Width(b.Author))
 	}
-	authorWidth = min(authorWidth, maxAuthorWidth)
+	w.author = min(w.author, maxAuthorWidth)
+	return w
+}
 
-	visible := m.visibleBranches()
+// renderList draws rows of visible, starting at m.offset.
+func (m Model) renderList(visible []git.Branch, rows int) string {
+	// Ages are worked out on every render, so they stay current while the
+	// app is open. They're plain ASCII, so len is their width on screen.
+	now := time.Now()
+	dateWidth := 0
+	for _, b := range m.branches {
+		dateWidth = max(dateWidth, len(relativeTime(b.CommitTime, now)))
+	}
+	w := m.widths
+
 	var s strings.Builder
-	end := min(m.offset+m.listHeight(), len(visible))
+	end := min(m.offset+rows, len(visible))
 	if m.offset > 0 {
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("  ↑ %d more", m.offset)) + "\n")
 	}
@@ -51,18 +66,18 @@ func (m Model) renderList() string {
 			check = selectedStyle.Render("[x]")
 		}
 
-		name := padRight(b.Name, nameWidth)
+		name := padRight(b.Name, w.name)
 		if i == m.cursor {
 			name = cursorStyle.Render(name)
 		}
 
-		author := ansi.Truncate(b.Author, authorWidth, "…")
+		author := ansi.Truncate(b.Author, w.author, "…")
 
 		row := fmt.Sprintf("%s%s %s  %s  %s  %s  %s",
 			pointer, check, name,
 			mutedStyle.Render(padRight(relativeTime(b.CommitTime, now), dateWidth)),
-			padRight(m.renderTags(b), tagWidth),
-			mutedStyle.Render(padRight(author, authorWidth)),
+			padRight(m.renderTags(b), w.tags),
+			mutedStyle.Render(padRight(author, w.author)),
 			b.Subject)
 
 		// Cut rows off at the terminal edge instead of letting them wrap.

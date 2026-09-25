@@ -8,17 +8,25 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
 // listHeight is how many branch rows fit on screen: the terminal height
 // minus the header, the footer (measured, not assumed), and the two
 // "↑/↓ N more" lines.
 func (m Model) listHeight() int {
+	visible := m.visibleBranches()
+	return m.rowsFor(len(visible), m.renderFooter(visible))
+}
+
+// rowsFor is listHeight given the number of visible branches and the
+// footer, for render, which has both already.
+func (m Model) rowsFor(visible int, footer string) int {
 	if m.height == 0 {
-		return len(m.visibleBranches()) // size unknown yet: show everything
+		return visible // size unknown yet: show everything
 	}
 	const headerLines, scrollMarkers = 2, 2
-	return max(m.height-headerLines-scrollMarkers-lipgloss.Height(m.renderFooter()), 3)
+	return max(m.height-headerLines-scrollMarkers-lipgloss.Height(footer), 3)
 }
 
 func (m Model) View() tea.View {
@@ -63,30 +71,34 @@ func (m Model) render() string {
 		return s.String()
 	}
 
+	// Worked out once here and passed down: each takes a pass over every
+	// branch, and the list's height depends on the footer's.
+	visible := m.visibleBranches()
+	footer := m.renderFooter(visible)
 	switch {
 	case len(m.branches) == 0:
 		s.WriteString(mutedStyle.Render("No local branches found.") + "\n")
-	case len(m.visibleBranches()) == 0 && m.filter.Value() != "":
+	case len(visible) == 0 && m.filter.Value() != "":
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("No branches match %q.", m.filter.Value())) + "\n")
-	case len(m.visibleBranches()) == 0:
+	case len(visible) == 0:
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("No branches are older than %s.", days(m.OlderThanDays))) + "\n")
 	default:
-		s.WriteString(m.renderList())
+		s.WriteString(m.renderList(visible, m.rowsFor(len(visible), footer)))
 	}
 
-	s.WriteString(m.renderFooter())
+	s.WriteString(footer)
 	return s.String()
 }
 
 // renderFooter is everything below the list: the last delete's results, the
 // selection count, and the key help.
-func (m Model) renderFooter() string {
+func (m Model) renderFooter(visible []git.Branch) string {
 	var s strings.Builder
 	s.WriteString("\n")
 	for _, line := range m.resultLines() {
 		s.WriteString(line + "\n")
 	}
-	s.WriteString(m.renderSelectionCount() + "\n")
+	s.WriteString(m.renderSelectionCount(visible) + "\n")
 	if m.filter.Focused() {
 		s.WriteString(mutedStyle.Render("type to filter • ↑/↓ move • enter done • esc clear"))
 	} else {
@@ -156,13 +168,13 @@ func days(n int) string {
 
 // renderSelectionCount shows how many branches are selected, calling out any
 // the filter is hiding so they aren't deleted by surprise.
-func (m Model) renderSelectionCount() string {
-	selected := len(m.selectedBranches())
+func (m Model) renderSelectionCount(visible []git.Branch) string {
+	selected := len(m.selected)
 	if selected == 0 {
 		return ""
 	}
 	shown := 0
-	for _, b := range m.visibleBranches() {
+	for _, b := range visible {
 		if m.selected[b.Name] {
 			shown++
 		}
