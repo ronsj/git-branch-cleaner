@@ -472,3 +472,32 @@ func TestCtrlCQuitsImmediatelyWhenNotDeleting(t *testing.T) {
 		t.Fatal("ctrl+c while browsing should quit right away")
 	}
 }
+
+func TestManyResultsFitTheScreen(t *testing.T) {
+	m := loadedModel()
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 24})
+	m = next.(model)
+	for i := range 40 {
+		m.lastResults = append(m.lastResults, deleteResult{Name: fmt.Sprintf("old-%02d", i), SHA: "abc1234"})
+	}
+	m.lastResults = append(m.lastResults, deleteResult{
+		Name: "busy",
+		Err:  fmt.Errorf("git branch: error: cannot delete branch 'busy' used by worktree at '/a/very/long/path/that/would/wrap/on/a/narrow/screen'"),
+	})
+
+	screen := m.render()
+	if h := lipgloss.Height(screen); h > 24 {
+		t.Errorf("screen is %d lines tall, terminal is 24:\n%s", h, screen)
+	}
+	for line := range strings.SplitSeq(screen, "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Errorf("line is %d wide, terminal is 60: %q", w, line)
+		}
+	}
+	if !strings.Contains(screen, "✗") {
+		t.Error("the failure must stay visible even when results are cut short")
+	}
+	if !strings.Contains(screen, "all listed when you quit") {
+		t.Error("expected a note that the rest are listed on exit")
+	}
+}

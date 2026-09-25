@@ -409,7 +409,7 @@ func (m model) listHeight() int {
 	if m.height == 0 {
 		return len(m.visibleBranches()) // size unknown yet: show everything
 	}
-	chrome := 8 + len(m.lastResults)
+	chrome := 8 + len(m.resultLines())
 	if m.help.ShowAll {
 		chrome += 3
 	}
@@ -483,12 +483,8 @@ func (m model) render() string {
 	}
 
 	s.WriteString("\n")
-	for _, r := range m.lastResults {
-		if r.Err != nil {
-			s.WriteString(errorStyle.Render("✗ "+r.Err.Error()) + "\n")
-		} else {
-			s.WriteString(mergedStyle.Render("✓ "+r.String()) + "\n")
-		}
+	for _, line := range m.resultLines() {
+		s.WriteString(line + "\n")
 	}
 
 	s.WriteString(m.renderSelectionCount() + "\n")
@@ -501,6 +497,32 @@ func (m model) render() string {
 		s.WriteString(m.help.View(k))
 	}
 	return s.String()
+}
+
+// resultLines renders the last delete's results, failures first so a long
+// list can't hide them. At most a quarter of the screen is used; everything
+// is listed again on exit.
+func (m model) resultLines() []string {
+	var failed, deleted []string
+	for _, r := range m.lastResults {
+		if r.Err != nil {
+			failed = append(failed, errorStyle.Render("✗ "+r.Err.Error()))
+		} else {
+			deleted = append(deleted, mergedStyle.Render("✓ "+r.String()))
+		}
+	}
+	lines := append(failed, deleted...)
+	if m.width > 0 {
+		for i, line := range lines {
+			lines[i] = ansi.Truncate(line, m.width, "…")
+		}
+	}
+	if m.height == 0 || len(lines) <= max(m.height/4, 3) {
+		return lines
+	}
+	shown := slices.Clone(lines[:max(m.height/4, 3)-1])
+	return append(shown, mutedStyle.Render(
+		fmt.Sprintf("  …and %d more (all listed when you quit)", len(lines)-len(shown))))
 }
 
 // renderHeader is the title line: app name, dry-run badge, base branch,
