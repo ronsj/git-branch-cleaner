@@ -247,3 +247,23 @@ func TestErrorScreenOnlyAcceptsRetryAndQuit(t *testing.T) {
 		t.Fatal("q on the error screen should quit")
 	}
 }
+
+// A reload that finds new commits on a selected branch deselects it, so the
+// user sees the branch again before those commits can be deleted.
+func TestReloadDropsSelectionsThatChanged(t *testing.T) {
+	m := press(loadedModelWith(Options{OlderThanDays: 30}), "a") // selects merged-feature and gone-feature
+
+	branches := testBranches()
+	branches[1].SHA = "new-commit"
+	next, _ := m.Update(branchesLoadedMsg{base: "main", branches: branches})
+	if got, want := next.(Model).selectedNames(), []string{"gone-feature"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected %v after merged-feature changed, want %v", got, want)
+	}
+
+	branches = testBranches()
+	branches[2].CommitTime = daysAgo(1) // gone-feature is now hidden by --older-than
+	next, _ = m.Update(branchesLoadedMsg{base: "main", branches: branches})
+	if got, want := next.(Model).selectedNames(), []string{"merged-feature"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("selected %v after gone-feature became too recent, want %v", got, want)
+	}
+}
