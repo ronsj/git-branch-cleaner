@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -114,8 +115,9 @@ func baseBranch() string {
 }
 
 // LoadBranches lists local branches and marks which are merged into the base
-// branch, directly or by a rebase merge (see rebaseMergedInto): baseOverride
-// if set (--base), otherwise a guess (see baseBranch).
+// branch, directly or by a rebase or squash merge (see rebaseMergedInto and
+// squashMergedInto): baseOverride if set (--base), otherwise a guess (see
+// baseBranch).
 // baseOverride can name a local branch or a remote-tracking one, such as
 // origin/main, which is often ahead of the local main.
 // The UI decides the order.
@@ -150,6 +152,12 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 				continue
 			}
 			if b.Merged, err = rebaseMergedInto(baseRef, b.Name); err != nil {
+				return "", nil, err
+			}
+			if b.Merged {
+				continue
+			}
+			if b.Merged, err = squashMergedInto(baseRef, b.Name); err != nil {
 				return "", nil, err
 			}
 		}
@@ -212,6 +220,71 @@ func rebaseMergedInto(baseRef, branch string) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+// squashMergedInto reports whether one commit in baseRef makes the same change
+// as the whole branch, as after a pull request is squash-merged. It compares
+// patch-ids: the branch's diff since it left the base against each commit the
+// base has gained since then, limited to the files the branch changed. Diffs
+// of the same change match even if the base moved on elsewhere in the
+// meantime, but not if it changed lines next to the branch's.
+//
+// A match means the base has every change the branch made, even if the
+// matching commit also changed other files. Unlike rebaseMergedInto, this
+// looks at the branch's end result, so a branch with merge commits can still
+// match: anything a merge added is in the diff.
+func squashMergedInto(baseRef, branch string) (bool, error) {
+	branchRef := "refs/heads/" + branch
+	// The same options for every diff, so the same change always looks the
+	// same. Without renames, a moved file is listed under both its names.
+	// --full-index gives binary files whole blob ids for patch-id to tell
+	// changes apart by.
+	diffOptions := []string{"--no-ext-diff", "--no-color", "--no-renames", "--full-index"}
+
+	// Three dots: the diff from the merge base, i.e. what the branch changed.
+	changes := baseRef + "..." + branchRef
+	paths, err := git(slices.Concat([]string{"diff", "--name-only", "-z"}, diffOptions, []string{changes, "--"})...)
+	if err != nil || paths == "" {
+		return false, err
+	}
+	diff, err := git(slices.Concat([]string{"diff"}, diffOptions, []string{changes, "--"})...)
+	if err != nil {
+		return false, err
+	}
+	// One diff, so one patch-id.
+	want, err := patchIDs(diff)
+	if err != nil || len(want) != 1 {
+		return false, err
+	}
+
+	// --stdin takes the paths after a "--" line, one per line, so there's no
+	// limit on how many and no quoting: GIT_LITERAL_PATHSPECS stops a name
+	// like "*.go" from matching as a pattern. (A path with a newline in it
+	// gets split and just finds nothing.)
+	stdin := "--\n" + strings.ReplaceAll(strings.TrimSuffix(paths, "\x00"), "\x00", "\n") + "\n"
+	log, err := run(stdin, []string{"GIT_LITERAL_PATHSPECS=1"}, nil,
+		slices.Concat([]string{"log", "-p", "--no-merges"}, diffOptions, []string{"--stdin", branchRef + ".." + baseRef})...)
+	if err != nil || log == "" {
+		return false, err
+	}
+	have, err := patchIDs(log)
+	return slices.Contains(have, want[0]), err
+}
+
+// patchIDs returns the stable patch-id of each patch in diffs: the output of
+// git diff or git log -p.
+func patchIDs(diffs string) ([]string, error) {
+	out, err := run(diffs+"\n", nil, nil, "patch-id", "--stable")
+	if err != nil {
+		return nil, err
+	}
+	var ids []string
+	for line := range strings.SplitSeq(out, "\n") {
+		if id, _, ok := strings.Cut(line, " "); ok {
+			ids = append(ids, id)
+		}
+	}
+	return ids, nil
 }
 
 // branchSHAs returns the commit every local branch points to, in one git call.

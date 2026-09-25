@@ -14,16 +14,18 @@ import (
 // Stdout is returned even if git fails, since git may have done part of the
 // work (deleted some of the branches, say).
 func git(args ...string) (string, error) {
-	return run(nil, nil, args...)
+	return run("", nil, nil, args...)
 }
 
-// run is git with extra environment variables and -c config settings.
-func run(env, config []string, args ...string) (string, error) {
+// run is git with input on stdin, extra environment variables, and -c config
+// settings.
+func run(stdin string, env, config []string, args ...string) (string, error) {
 	var options []string
 	for _, c := range config {
 		options = append(options, "-c", c)
 	}
 	cmd := exec.Command("git", append(options, args...)...)
+	cmd.Stdin = strings.NewReader(stdin)
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
 	}

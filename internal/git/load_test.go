@@ -2,6 +2,7 @@ package git
 
 import (
 	"maps"
+	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -291,4 +292,68 @@ func TestLoadBranchesDetectsRebaseMerges(t *testing.T) {
 			t.Errorf("%s: Merged = %v, want %v", tt.name, got, tt.merged)
 		}
 	}
+}
+
+// Squash-merging a pull request puts the branch's whole change on main as one
+// new commit, which neither git branch --merged nor matching the branch's
+// commits one by one finds.
+func TestLoadBranchesDetectsSquashMerges(t *testing.T) {
+	testrepo.New(t)
+	lines := "1\n2\n3\n4\n5\n6\n7\n8\n9\n"
+	commitFile(t, "shared.txt", lines)
+	commitFile(t, "old.txt", lines)
+
+	testrepo.Git(t, "switch", "-q", "-c", "squashed")
+	commitFile(t, "a.txt", "a")
+	commitFile(t, "shared.txt", strings.Replace(lines, "2", "two", 1))
+	testrepo.Git(t, "switch", "-q", "-c", "with-more") // more work after the squash
+	commitFile(t, "b.txt", "b")
+	testrepo.Git(t, "switch", "-q", "-c", "merged-main-in", "main")
+	commitFile(t, "c.txt", "c")
+	testrepo.Git(t, "switch", "-q", "-c", "renamed", "main")
+	testrepo.Git(t, "mv", "old.txt", "new.txt")
+	testrepo.Git(t, "commit", "-q", "-m", "Rename")
+	commitFile(t, "new.txt", strings.Replace(lines, "5", "five", 1)) // still a rename to git
+	testrepo.Git(t, "switch", "-q", "-c", "different", "main")
+	commitFile(t, "d.txt", "mine")
+
+	testrepo.Git(t, "switch", "-q", "main")
+	commitFile(t, "shared.txt", strings.Replace(lines, "9", "nine", 1)) // main moves on
+	commitFile(t, "d.txt", "theirs")
+	squash := func(branch string) {
+		t.Helper()
+		testrepo.Git(t, "merge", "-q", "--squash", branch)
+		testrepo.Git(t, "commit", "-q", "-m", "Squash "+branch)
+	}
+	squash("squashed")
+	squash("renamed")
+	testrepo.Git(t, "switch", "-q", "merged-main-in")
+	testrepo.Git(t, "merge", "-q", "--no-edit", "main")
+	testrepo.Git(t, "switch", "-q", "main")
+	squash("merged-main-in")
+
+	for _, tt := range []struct {
+		name   string
+		merged bool
+	}{
+		{"squashed", true},
+		{"with-more", false},
+		{"merged-main-in", true},
+		{"renamed", true},
+		{"different", false},
+	} {
+		if got := loadBranch(t, tt.name).Merged; got != tt.merged {
+			t.Errorf("%s: Merged = %v, want %v", tt.name, got, tt.merged)
+		}
+	}
+}
+
+// commitFile writes content to name and commits it.
+func commitFile(t *testing.T, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(name, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testrepo.Git(t, "add", name)
+	testrepo.Git(t, "commit", "-q", "-m", "Change "+name)
 }

@@ -131,8 +131,8 @@ lists every selected branch, hidden or not.
 
 | Label | Meaning |
 | --- | --- |
-| `merged` | Every commit on the branch is already in the base branch, or an identical copy of it is, as after a rebase merge. Safe to delete. Also shown on branches that can't be selected yet, such as `worktree merged`: remove that worktree and the branch is safe to delete. |
-| `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches only show up this way, because git doesn't see their commits in the base branch. |
+| `merged` | Every commit on the branch is already in the base branch, or the same changes are, as after a rebase or squash merge. Safe to delete. Also shown on branches that can't be selected yet, such as `worktree merged`: remove that worktree and the branch is safe to delete. |
+| `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. This catches merged branches that `merged` misses (see below). |
 | `current` | The branch you have checked out. It can't be selected. |
 | `base` | The branch everything is compared against. With a remote-tracking base such as `origin/main`, it's the local branch that tracks it. It can't be selected. |
 | `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it, so it can't be selected. |
@@ -148,16 +148,17 @@ Branches merged on the remote, through a pull request say, only show as
 against the remote's copy instead: run `git fetch`, then
 `git-branch-cleaner --base origin/main`.
 
-Rebase merges put copies of your commits on `main` with new SHAs. A branch
-still shows as `merged` if every one of its commits has an identical copy
-there, unless the branch has merge commits of its own (from merging `main`
-into it, say): a merge can hold changes a copy wouldn't show, so those
-branches aren't marked.
+Rebase and squash merges put new commits on `main` instead of yours, so git
+doesn't see the branch as merged. git-branch-cleaner still marks it `merged`
+when `main` has the same changes: an identical copy of every commit on the
+branch (a rebase merge), or one commit making the branch's whole change (a
+squash merge).
 
-Squash merges combine your commits into one new commit, so git can't match
-them. Squash-merged branches show as `gone` instead, but only once their
-remote branch has been deleted (GitHub can do this automatically after a
-merge) and you've fetched.
+It can miss a merge that changed things along the way: when `main` had
+changed lines right next to yours, say, or the pull request was edited as it
+was merged. Those branches show as `gone` instead, once their remote branch
+has been deleted (GitHub can do this automatically after a merge) and you've
+fetched.
 
 The `gone` label depends on your local copy of the remote. Run
 `git fetch --prune` first so branches deleted on the remote are detected.

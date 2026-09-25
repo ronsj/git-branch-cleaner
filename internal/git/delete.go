@@ -153,7 +153,7 @@ func DeleteBranches(branches []Branch, base string) []DeleteResult {
 // plenty to look the commit up by). "--" ends the options, so a name like
 // "-r" isn't read as a flag.
 func forceDelete(names []string, deleted map[string]string) error {
-	out, err := run([]string{"LC_ALL=C"}, []string{"core.abbrev=40"},
+	out, err := run("", []string{"LC_ALL=C"}, []string{"core.abbrev=40"},
 		append([]string{"branch", "-D", "--"}, names...)...)
 	for line := range strings.SplitSeq(out, "\n") {
 		rest, ok := strings.CutPrefix(line, "Deleted branch ")
