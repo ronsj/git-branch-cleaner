@@ -53,7 +53,7 @@ func printHistory(m model) {
 		}
 		fmt.Println(r)
 		if !r.DryRun {
-			fmt.Printf("  restore: git branch %s %s\n", r.Name, r.SHA)
+			fmt.Println("  restore:", restoreCommand(r.Name, r.SHA))
 		}
 	}
 }
