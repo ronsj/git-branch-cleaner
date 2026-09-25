@@ -76,7 +76,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
-		if msg.String() == "ctrl+c" {
+		// q quits too while loading or deleting: nothing else takes keys
+		// then, and the filter (where q is just a letter) can't be open.
+		if msg.String() == "ctrl+c" || m.busy() && key.Matches(msg, keys.Quit) {
 			// Quitting mid-delete would lose the results, and with them the
 			// restore commands printed on exit, so wait for them.
 			if m.state == stateDeleting {

@@ -267,3 +267,20 @@ func TestReloadDropsSelectionsThatChanged(t *testing.T) {
 		t.Fatalf("selected %v after gone-feature became too recent, want %v", got, want)
 	}
 }
+
+func TestQQuitsWhileBusy(t *testing.T) {
+	// Loading: nothing else takes keys, so q quits right away.
+	_, cmd := New(Options{}).Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd == nil {
+		t.Fatal("expected a quit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("q while loading should quit")
+	}
+
+	// Deleting: like ctrl+c, q waits for the results.
+	next, cmd := press(loadedModel(), "a", "enter", "y").Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
+	if cmd != nil || !next.(Model).quitting {
+		t.Fatal("q mid-delete should quit once the results are in")
+	}
+}
