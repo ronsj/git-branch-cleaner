@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -13,26 +14,41 @@ import (
 	"github.com/ronsj/git-branch-cleaner/internal/tui"
 )
 
-// Execute parses the command line, runs the UI, and prints what was deleted.
-// Like a main function, it exits the process itself on errors.
+// Execute runs the command line and exits with its status.
 func Execute() {
-	dryRun := flag.Bool("dry-run", false, "show what would be deleted without deleting anything")
-	olderThan := flag.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
-	base := flag.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
-	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: git-branch-cleaner [flags]\n\n")
-		fmt.Fprintf(flag.CommandLine.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
-		flag.PrintDefaults()
+	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// run parses args, runs the UI, and prints the summary of what was deleted to
+// stdout, with usage and errors going to stderr. It returns the exit status:
+// 0 on success, 1 on error, 2 for a usage error. It uses its own flag set, so
+// it can run more than once (in tests, say).
+func run(args []string, stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("git-branch-cleaner", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	dryRun := flags.Bool("dry-run", false, "show what would be deleted without deleting anything")
+	olderThan := flags.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
+	base := flags.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
+	flags.Usage = func() {
+		fmt.Fprintf(flags.Output(), "Usage: git-branch-cleaner [flags]\n\n")
+		fmt.Fprintf(flags.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
+		flags.PrintDefaults()
 	}
-	flag.Parse()
-	if flag.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "unexpected argument: %s\n\n", flag.Arg(0))
-		flag.Usage()
-		os.Exit(2)
+	if err := flags.Parse(args); err != nil {
+		// The flag package has already printed the problem and the usage.
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	if flags.NArg() > 0 {
+		fmt.Fprintf(stderr, "unexpected argument: %s\n\n", flags.Arg(0))
+		flags.Usage()
+		return 2
 	}
 	if *olderThan < 0 {
-		fmt.Fprintf(os.Stderr, "-older-than must be 0 or more days, got %d\n", *olderThan)
-		os.Exit(2)
+		fmt.Fprintf(stderr, "-older-than must be 0 or more days, got %d\n", *olderThan)
+		return 2
 	}
 
 	opts := tui.Options{DryRun: *dryRun, OlderThanDays: *olderThan, BaseOverride: *base}
@@ -40,12 +56,13 @@ func Execute() {
 	// Run returns the last model even when it fails, and branches may already
 	// have been deleted, so print the history before reporting the error.
 	if m, ok := final.(tui.Model); ok {
-		printHistory(os.Stdout, m.History(), m.DryRun)
+		printHistory(stdout, m.History(), m.DryRun)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "error:", err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, "error:", err)
+		return 1
 	}
+	return 0
 }
 
 // printHistory prints what was deleted, with restore commands, and what
