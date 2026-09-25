@@ -8,7 +8,6 @@ import (
 type Branch struct {
 	Name       string
 	SHA        string    // full commit the branch points to
-	LastCommit string    // relative date for display, e.g. "3 weeks ago"
 	CommitTime time.Time // exact date, for sorting and age checks
 	Current    bool      // checked out right now
 	Worktree   string    // path of the worktree that has it checked out, if any

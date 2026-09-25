@@ -13,9 +13,9 @@ import (
 )
 
 // row places one branch's field values at their positions in a record.
-func row(name, relativeDate, unixDate, head, upstreamTrack, worktree, author, subject, sha string) []string {
+func row(name, unixDate, head, upstreamTrack, worktree, author, subject, sha string) []string {
 	var f [numFields]string
-	f[fieldName], f[fieldRelativeDate], f[fieldUnixDate] = name, relativeDate, unixDate
+	f[fieldName], f[fieldUnixDate] = name, unixDate
 	f[fieldHead], f[fieldUpstreamTrack], f[fieldWorktree] = head, upstreamTrack, worktree
 	f[fieldAuthor], f[fieldSubject], f[fieldSHA] = author, subject, sha
 	return f[:]
@@ -33,20 +33,20 @@ func forEachRefOutput(rows ...[]string) string {
 
 func TestParseBranches(t *testing.T) {
 	out := forEachRefOutput(
-		row("old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"),
-		row("main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"),
-		row("wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
-		row("empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"),
-		row("bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"),
+		row("old-feature", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"),
+		row("main", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"),
+		row("wip", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
+		row("empty-subject", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"),
+		row("bad-time", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"),
 	)
 
 	got := parseBranches(out)
 	want := []Branch{
-		{Name: "old-feature", LastCommit: "3 months ago", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
-		{Name: "main", LastCommit: "2 days ago", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
-		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject", SHA: "cccc333"},
-		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim", SHA: "dddd444"},
-		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim", SHA: "eeee555"},
+		{Name: "old-feature", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
+		{Name: "main", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
+		{Name: "wip", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject", SHA: "cccc333"},
+		{Name: "empty-subject", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim", SHA: "dddd444"},
+		{Name: "bad-time", CommitTime: time.Unix(0, 0), Author: "Alex Kim", SHA: "eeee555"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseBranches:\n got  %+v\n want %+v", got, want)
@@ -63,7 +63,7 @@ func TestEveryBranchFieldHasAFormat(t *testing.T) {
 }
 
 func TestParseBranchesWithTrailingNewline(t *testing.T) {
-	out := forEachRefOutput(row("a", "now", "1", " ", "", "", "Sam", "", "ffff666")) + "\n"
+	out := forEachRefOutput(row("a", "1", " ", "", "", "Sam", "", "ffff666")) + "\n"
 	if got := parseBranches(out); len(got) != 1 || got[0].Name != "a" {
 		t.Errorf("parseBranches = %+v, want the one branch", got)
 	}

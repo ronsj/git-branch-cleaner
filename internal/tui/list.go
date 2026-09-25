@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -13,11 +14,15 @@ import (
 const maxAuthorWidth = 20
 
 func (m Model) renderList() string {
+	// Ages are worked out on every render, so they stay current while the
+	// app is open.
+	now := time.Now()
+
 	// Size each column to its widest value so the columns line up.
 	var nameWidth, dateWidth, tagWidth, authorWidth int
 	for _, b := range m.branches {
 		nameWidth = max(nameWidth, lipgloss.Width(b.Name))
-		dateWidth = max(dateWidth, lipgloss.Width(b.LastCommit))
+		dateWidth = max(dateWidth, lipgloss.Width(relativeTime(b.CommitTime, now)))
 		tagWidth = max(tagWidth, lipgloss.Width(m.renderTags(b)))
 		authorWidth = max(authorWidth, lipgloss.Width(b.Author))
 	}
@@ -55,7 +60,7 @@ func (m Model) renderList() string {
 
 		row := fmt.Sprintf("%s%s %s  %s  %s  %s  %s",
 			pointer, check, name,
-			mutedStyle.Render(padRight(b.LastCommit, dateWidth)),
+			mutedStyle.Render(padRight(relativeTime(b.CommitTime, now), dateWidth)),
 			padRight(m.renderTags(b), tagWidth),
 			mutedStyle.Render(padRight(author, authorWidth)),
 			b.Subject)

@@ -10,7 +10,6 @@ import (
 // Positions of the fields in each for-each-ref record.
 const (
 	fieldName = iota
-	fieldRelativeDate
 	fieldUnixDate
 	fieldHead
 	fieldUpstreamTrack
@@ -30,7 +29,6 @@ const (
 // :short gives "heads/main".
 var branchFields = [numFields]string{
 	fieldName:          "%(refname:lstrip=2)",
-	fieldRelativeDate:  "%(committerdate:relative)",
 	fieldUnixDate:      "%(committerdate:unix)",
 	fieldHead:          "%(HEAD)",
 	fieldUpstreamTrack: "%(upstream:track)",
@@ -65,7 +63,6 @@ func parseBranches(out string) []Branch {
 		branches = append(branches, Branch{
 			Name:       fields[fieldName],
 			SHA:        fields[fieldSHA],
-			LastCommit: fields[fieldRelativeDate],
 			CommitTime: time.Unix(unix, 0),
 			Current:    fields[fieldHead] == "*",
 			Gone:       fields[fieldUpstreamTrack] == "[gone]",
