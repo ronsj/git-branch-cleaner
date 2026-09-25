@@ -13,6 +13,15 @@ import (
 	"time"
 )
 
+// row places one branch's field values at their positions in a record.
+func row(name, relativeDate, unixDate, head, upstreamTrack, worktree, author, subject, sha string) []string {
+	var f [numFields]string
+	f[fieldName], f[fieldRelativeDate], f[fieldUnixDate] = name, relativeDate, unixDate
+	f[fieldHead], f[fieldUpstreamTrack], f[fieldWorktree] = head, upstreamTrack, worktree
+	f[fieldAuthor], f[fieldSubject], f[fieldSHA] = author, subject, sha
+	return f[:]
+}
+
 // forEachRefOutput builds for-each-ref output in branchFormat from rows of
 // field values, trimmed of its final newline the way git() returns it.
 func forEachRefOutput(rows ...[]string) string {
@@ -25,11 +34,11 @@ func forEachRefOutput(rows ...[]string) string {
 
 func TestParseBranches(t *testing.T) {
 	out := forEachRefOutput(
-		[]string{"old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"},
-		[]string{"main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"},
-		[]string{"wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"},
-		[]string{"empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"},
-		[]string{"bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"},
+		row("old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form", "aaaa111"),
+		row("main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login", "bbbb222"),
+		row("wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
+		row("empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"),
+		row("bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"),
 	)
 
 	got := parseBranches(out)
@@ -45,8 +54,17 @@ func TestParseBranches(t *testing.T) {
 	}
 }
 
+func TestEveryBranchFieldHasAFormat(t *testing.T) {
+	// A keyed array leaves any position without an entry empty.
+	for i, f := range branchFields {
+		if f == "" {
+			t.Errorf("branchFields[%d] has no format", i)
+		}
+	}
+}
+
 func TestParseBranchesWithTrailingNewline(t *testing.T) {
-	out := forEachRefOutput([]string{"a", "now", "1", " ", "", "", "Sam", "", "ffff666"}) + "\n"
+	out := forEachRefOutput(row("a", "now", "1", " ", "", "", "Sam", "", "ffff666")) + "\n"
 	if got := parseBranches(out); len(got) != 1 || got[0].Name != "a" {
 		t.Errorf("parseBranches = %+v, want the one branch", got)
 	}

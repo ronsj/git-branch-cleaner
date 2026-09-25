@@ -74,27 +74,44 @@ func git(args ...string) (string, error) {
 	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
-// branchFields are the for-each-ref fields read for each branch, in order.
+// Positions of the fields in each for-each-ref record.
+const (
+	fieldName = iota
+	fieldRelativeDate
+	fieldUnixDate
+	fieldHead
+	fieldUpstreamTrack
+	fieldWorktree
+	fieldAuthor
+	fieldSubject
+	fieldSHA
+	numFields
+)
+
+// branchFields are the for-each-ref fields read for each branch. The keyed
+// entries tie each one to its position above, so the list and the parser
+// can't get out of step.
+//
 // The name uses lstrip=2 (drop "refs/heads/") rather than :short, which
 // shortens only as far as stays unambiguous: with a tag also named "main",
 // :short gives "heads/main".
-var branchFields = []string{
-	"%(refname:lstrip=2)",
-	"%(committerdate:relative)",
-	"%(committerdate:unix)",
-	"%(HEAD)",
-	"%(upstream:track)",
-	"%(worktreepath)",
-	"%(authorname)",
-	"%(contents:subject)",
-	"%(objectname)",
+var branchFields = [numFields]string{
+	fieldName:          "%(refname:lstrip=2)",
+	fieldRelativeDate:  "%(committerdate:relative)",
+	fieldUnixDate:      "%(committerdate:unix)",
+	fieldHead:          "%(HEAD)",
+	fieldUpstreamTrack: "%(upstream:track)",
+	fieldWorktree:      "%(worktreepath)",
+	fieldAuthor:        "%(authorname)",
+	fieldSubject:       "%(contents:subject)",
+	fieldSHA:           "%(objectname)",
 }
 
 // branchFormat separates fields with NUL (%00) and ends each record with one,
 // just before the newline git adds. NUL is the one byte that can't appear in a
 // branch name, commit message, or file path, so no value can break parsing; a
 // worktree path, for example, can contain tabs or even newlines.
-var branchFormat = strings.Join(branchFields, "%00") + "%00"
+var branchFormat = strings.Join(branchFields[:], "%00") + "%00"
 
 // parseBranches turns `git for-each-ref --format=branchFormat` output into Branches.
 func parseBranches(out string) []Branch {
@@ -106,22 +123,22 @@ func parseBranches(out string) []Branch {
 	var branches []Branch
 	for record := range strings.SplitSeq(out, "\x00\n") {
 		fields := strings.Split(record, "\x00")
-		if len(fields) != len(branchFields) {
+		if len(fields) != numFields {
 			continue
 		}
 		// A bad timestamp parses as 0, i.e. 1970, so the branch just looks
 		// very old; not worth dropping the branch over.
-		unix, _ := strconv.ParseInt(fields[2], 10, 64)
+		unix, _ := strconv.ParseInt(fields[fieldUnixDate], 10, 64)
 		branches = append(branches, Branch{
-			Name:       fields[0],
-			LastCommit: fields[1],
+			Name:       fields[fieldName],
+			SHA:        fields[fieldSHA],
+			LastCommit: fields[fieldRelativeDate],
 			CommitTime: time.Unix(unix, 0),
-			Current:    fields[3] == "*",
-			Gone:       fields[4] == "[gone]",
-			Worktree:   fields[5],
-			Author:     fields[6],
-			Subject:    fields[7],
-			SHA:        fields[8],
+			Current:    fields[fieldHead] == "*",
+			Gone:       fields[fieldUpstreamTrack] == "[gone]",
+			Worktree:   fields[fieldWorktree],
+			Author:     fields[fieldAuthor],
+			Subject:    fields[fieldSubject],
 		})
 	}
 	return branches
