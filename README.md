@@ -132,7 +132,7 @@ lists every selected branch, hidden or not.
 | Label | Meaning |
 | --- | --- |
 | `merged` | Every commit on the branch is already in the base branch. Safe to delete. Also shown on branches that can't be selected yet, such as `worktree merged`: remove that worktree and the branch is safe to delete. |
-| `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash-merged branches show up this way, because git doesn't see their commits in the base branch. |
+| `gone` | The branch tracked a remote branch that has since been deleted, typically after a PR was merged. Squash- and rebase-merged branches only show up this way, because git doesn't see their commits in the base branch. |
 | `current` | The branch you have checked out. It can't be selected. |
 | `base` | The branch everything is compared against. With a remote-tracking base such as `origin/main`, it's the local branch that tracks it. It can't be selected. |
 | `worktree` | Checked out in another [worktree](https://git-scm.com/docs/git-worktree). Git won't delete it, so it can't be selected. |
@@ -148,8 +148,16 @@ Branches merged on the remote, through a pull request say, only show as
 against the remote's copy instead: run `git fetch`, then
 `git-branch-cleaner --base origin/main`.
 
+That only works for pull requests merged with a merge commit. Squash and
+rebase merges put copies of your commits on `main`, with new SHAs, so git
+doesn't see the branch as merged. Those branches show as `gone` instead, but
+only once their remote branch has been deleted (GitHub can do this
+automatically after a merge) and you've fetched.
+
 The `gone` label depends on your local copy of the remote. Run
 `git fetch --prune` first so branches deleted on the remote are detected.
+
+If `a` finds no `merged` or `gone` branches, it says so below the list.
 
 ## Recovering a deleted branch
 
