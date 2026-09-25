@@ -64,22 +64,35 @@ func git(args ...string) (string, error) {
 	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
-// The fields are tab-separated (%09) so branch names never collide with the
-// separator. The commit subject goes last because it's free text: splitting
-// into at most branchFields parts keeps any tabs inside it intact.
-const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(HEAD)%09%(upstream:track)%09%(worktreepath)%09%(authorname)%09%(contents:subject)"
+// branchFields are the for-each-ref fields read for each branch, in order.
+var branchFields = []string{
+	"%(refname:short)",
+	"%(committerdate:relative)",
+	"%(committerdate:unix)",
+	"%(HEAD)",
+	"%(upstream:track)",
+	"%(worktreepath)",
+	"%(authorname)",
+	"%(contents:subject)",
+}
 
-const branchFields = 8
+// branchFormat separates fields with NUL (%00) and ends each record with one,
+// just before the newline git adds. NUL is the one byte that can't appear in a
+// branch name, commit message, or file path, so no value can break parsing; a
+// worktree path, for example, can contain tabs or even newlines.
+var branchFormat = strings.Join(branchFields, "%00") + "%00"
 
 // parseBranches turns `git for-each-ref --format=branchFormat` output into Branches.
 func parseBranches(out string) []Branch {
+	// Records are separated by NUL + newline. Remove the last record's
+	// terminator once, up front: trimming each record would also eat the
+	// separator before an empty last field.
+	out = strings.TrimSuffix(strings.TrimSuffix(out, "\n"), "\x00")
+
 	var branches []Branch
-	for line := range strings.SplitSeq(out, "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		fields := strings.SplitN(line, "\t", branchFields)
-		if len(fields) < branchFields {
+	for record := range strings.SplitSeq(out, "\x00\n") {
+		fields := strings.Split(record, "\x00")
+		if len(fields) != len(branchFields) {
 			continue
 		}
 		// A bad timestamp parses as 0, i.e. 1970, so the branch just looks

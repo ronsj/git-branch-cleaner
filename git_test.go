@@ -9,23 +9,42 @@ import (
 	"time"
 )
 
+// forEachRefOutput builds for-each-ref output in branchFormat from rows of
+// field values, trimmed of its final newline the way git() returns it.
+func forEachRefOutput(rows ...[]string) string {
+	var out strings.Builder
+	for _, fields := range rows {
+		out.WriteString(strings.Join(fields, "\x00") + "\x00\n")
+	}
+	return strings.TrimSuffix(out.String(), "\n")
+}
+
 func TestParseBranches(t *testing.T) {
-	out := "old-feature\t3 months ago\t1750000000\t \t[gone]\t/work/review\tAlex Kim\tAdd login form\n" +
-		"main\t2 days ago\t1757000000\t*\t\t/work/app\tSam Lee\tMerge feature/login\n" +
-		"wip\t5 minutes ago\t1757100000\t \t[ahead 2]\t\tSam Lee\tWIP: tabs\tin subject\n" +
-		"empty-subject\t1 year, 2 months ago\t1720000000\t \t\t\tAlex Kim\t\n" +
-		"bad-time\t1 day ago\tnot-a-number\t \t\t\tAlex Kim\tOdd\n"
+	out := forEachRefOutput(
+		[]string{"old-feature", "3 months ago", "1750000000", " ", "[gone]", "/work/review", "Alex Kim", "Add login form"},
+		[]string{"main", "2 days ago", "1757000000", "*", "", "/work/app", "Sam Lee", "Merge feature/login"},
+		[]string{"wip", "5 minutes ago", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject"},
+		[]string{"empty-subject", "1 year, 2 months ago", "1720000000", " ", "", "", "Alex Kim", ""},
+		[]string{"bad-time", "1 day ago", "not-a-number", " ", "", "", "Alex Kim", ""},
+	)
 
 	got := parseBranches(out)
 	want := []Branch{
 		{Name: "old-feature", LastCommit: "3 months ago", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form"},
 		{Name: "main", LastCommit: "2 days ago", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login"},
-		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Author: "Sam Lee", Subject: "WIP: tabs\tin subject"},
+		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject"},
 		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim"},
-		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim", Subject: "Odd"},
+		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseBranches:\n got  %+v\n want %+v", got, want)
+	}
+}
+
+func TestParseBranchesWithTrailingNewline(t *testing.T) {
+	out := forEachRefOutput([]string{"a", "now", "1", " ", "", "", "Sam", ""}) + "\n"
+	if got := parseBranches(out); len(got) != 1 || got[0].Name != "a" {
+		t.Errorf("parseBranches = %+v, want the one branch", got)
 	}
 }
 
@@ -271,5 +290,20 @@ func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
 	}
 	if results := deleteBranches([]string{"feature"}); results[0].Err == nil {
 		t.Error("expected git to refuse deleting a branch that's being bisected")
+	}
+}
+
+func TestLoadBranchesWithOddWorktreePath(t *testing.T) {
+	newTestRepo(t, "review")
+	wt := filepath.Join(t.TempDir(), "odd\tname\nwith newline")
+	mustGit(t, "worktree", "add", "-q", wt, "review")
+
+	review := loadBranch(t, "review") // fails if the branch dropped out of the list
+	wantPath, _ := filepath.EvalSymlinks(wt)
+	if review.Worktree != wantPath {
+		t.Errorf("Worktree = %q, want %q", review.Worktree, wantPath)
+	}
+	if review.Author != "Test" {
+		t.Errorf("fields after the path are misaligned: Author = %q", review.Author)
 	}
 }
