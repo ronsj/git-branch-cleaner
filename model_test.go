@@ -523,3 +523,25 @@ func TestListFillsScreenExactly(t *testing.T) {
 		}
 	}
 }
+
+// Run with: go test -run '^$' -bench .
+func BenchmarkRender(b *testing.B) {
+	for _, n := range []int{100, 1000, 5000} {
+		var branches []Branch
+		for i := range n {
+			branches = append(branches, Branch{
+				Name: fmt.Sprintf("feature/branch-%05d", i), Merged: true, CommitTime: daysAgo(n - i),
+				Author: "Alex Kim", Subject: "Some commit subject",
+			})
+		}
+		next, _ := newModel(options{}).Update(branchesLoadedMsg{base: "main", branches: branches})
+		next, _ = next.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+		m := press(next.(model), "a") // worst case: everything selected
+
+		b.Run(fmt.Sprintf("branches=%d", n), func(b *testing.B) {
+			for b.Loop() {
+				_ = m.render()
+			}
+		})
+	}
+}

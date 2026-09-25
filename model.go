@@ -176,13 +176,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.base = msg.base
 		m.branches = sortBranches(msg.branches, m.sortBy)
 		m.err = nil
-		// Drop selections for branches that no longer exist or have become
-		// protected, e.g. checked out in another worktree since the last load.
-		for name := range m.selected {
-			if i := indexOf(m.branches, name); i < 0 || m.branches[i].Protected(m.base) {
-				delete(m.selected, name)
+		// Keep only selections that still exist and aren't protected, e.g.
+		// checked out in another worktree since the last load.
+		stillSelected := make(map[string]bool)
+		for _, b := range m.branches {
+			if m.selected[b.Name] && !b.Protected(m.base) {
+				stillSelected[b.Name] = true
 			}
 		}
+		m.selected = stillSelected
 		m.moveCursorTo(cursorName)
 		return m, nil
 
@@ -570,18 +572,18 @@ func days(n int) string {
 // renderSelectionCount shows how many branches are selected, calling out any
 // the filter is hiding so they aren't deleted by surprise.
 func (m model) renderSelectionCount() string {
-	selected := m.selectedNames()
-	if len(selected) == 0 {
+	selected := len(m.selectedBranches())
+	if selected == 0 {
 		return ""
 	}
-	visible := m.visibleBranches()
-	hidden := 0
-	for _, name := range selected {
-		if indexOf(visible, name) < 0 {
-			hidden++
+	shown := 0
+	for _, b := range m.visibleBranches() {
+		if m.selected[b.Name] {
+			shown++
 		}
 	}
-	text := fmt.Sprintf("%d selected", len(selected))
+	hidden := selected - shown
+	text := fmt.Sprintf("%d selected", selected)
 	if hidden > 0 {
 		text += fmt.Sprintf(" (%d hidden by filter)", hidden)
 	}
@@ -692,9 +694,8 @@ func (m model) renderConfirm() string {
 
 	var list []string
 	unmerged := 0
-	for _, name := range m.selectedNames() {
-		b := m.branches[indexOf(m.branches, name)]
-		line := "  " + name
+	for _, b := range m.selectedBranches() {
+		line := "  " + b.Name
 		if !b.Merged {
 			unmerged++
 			line += warnStyle.Render("  not merged")
