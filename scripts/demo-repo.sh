@@ -31,7 +31,8 @@ git remote add origin "$dir/remote.git"
 
 # at <days-ago>: backdate the next commit or merge by that many days.
 at() {
-  local when="$(( $(date +%s) - $1 * 86400 )) +0000"
+  local when
+  when="$(( $(date +%s) - $1 * 86400 )) +0000"
   export GIT_AUTHOR_DATE="$when" GIT_COMMITTER_DATE="$when"
 }
 
