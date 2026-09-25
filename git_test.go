@@ -56,17 +56,18 @@ func TestParseBranchesEmpty(t *testing.T) {
 	}
 }
 
-func TestRestoreSHA(t *testing.T) {
+func TestDeleteResultString(t *testing.T) {
+	sha := "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b"
 	tests := []struct {
-		output, want string
+		result deleteResult
+		want   string
 	}{
-		{"Deleted branch feature/x (was 1a2b3c4).", "1a2b3c4"},
-		{"Deleted branch fix-(parens) (was abcdef0).", "abcdef0"},
-		{"something unexpected", ""},
+		{deleteResult{Name: "feature/x", SHA: sha}, "Deleted branch feature/x (was 1a2b3c4)."},
+		{deleteResult{Name: "feature/x", SHA: sha, DryRun: true}, "Would delete branch feature/x (at 1a2b3c4)."},
 	}
 	for _, tt := range tests {
-		if got := restoreSHA(tt.output); got != tt.want {
-			t.Errorf("restoreSHA(%q) = %q, want %q", tt.output, got, tt.want)
+		if got := tt.result.String(); got != tt.want {
+			t.Errorf("String() = %q, want %q", got, tt.want)
 		}
 	}
 }
@@ -140,7 +141,7 @@ func TestPreviewDeletesKeepsBranches(t *testing.T) {
 
 	results := previewDeletes([]string{"old", "missing"})
 
-	if results[0].Err != nil || !strings.HasPrefix(results[0].Output, "Would delete branch old (at ") {
+	if results[0].Err != nil || !strings.HasPrefix(results[0].String(), "Would delete branch old (at ") {
 		t.Errorf("preview of old = %+v", results[0])
 	}
 	if results[1].Err == nil {
@@ -153,19 +154,23 @@ func TestPreviewDeletesKeepsBranches(t *testing.T) {
 
 func TestDeleteBranchesCanBeRestored(t *testing.T) {
 	newTestRepo(t, "old")
+	tip := mustGit(t, "rev-parse", "refs/heads/old")
 
 	results := deleteBranches([]string{"old"})
 	if results[0].Err != nil {
 		t.Fatal(results[0].Err)
+	}
+	if results[0].SHA != tip {
+		t.Errorf("recorded SHA = %q, want the branch's full tip %q", results[0].SHA, tip)
 	}
 	if branchExists("old") {
 		t.Fatal("branch should be deleted")
 	}
 
 	// The restore command printed on exit should bring it back.
-	mustGit(t, "branch", "old", restoreSHA(results[0].Output))
+	mustGit(t, "branch", "old", results[0].SHA)
 	if !branchExists("old") {
-		t.Fatal("branch should be restored from the SHA in git's output")
+		t.Fatal("branch should be restored from the recorded SHA")
 	}
 }
 

@@ -478,7 +478,7 @@ func (m model) render() string {
 		if r.Err != nil {
 			s.WriteString(errorStyle.Render("✗ "+r.Err.Error()) + "\n")
 		} else {
-			s.WriteString(mergedStyle.Render("✓ "+r.Output) + "\n")
+			s.WriteString(mergedStyle.Render("✓ "+r.String()) + "\n")
 		}
 	}
 

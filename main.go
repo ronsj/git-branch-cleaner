@@ -50,9 +50,9 @@ func printHistory(m model) {
 		if r.Err != nil {
 			continue
 		}
-		fmt.Println(r.Output)
-		if sha := restoreSHA(r.Output); sha != "" {
-			fmt.Printf("  restore: git branch %s %s\n", r.Name, sha)
+		fmt.Println(r)
+		if !r.DryRun {
+			fmt.Printf("  restore: git branch %s %s\n", r.Name, r.SHA)
 		}
 	}
 }

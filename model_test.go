@@ -269,8 +269,8 @@ func TestDryRunConfirmKeepsBranch(t *testing.T) {
 	if !branchExists("old") {
 		t.Fatal("dry run deleted the branch")
 	}
-	if !strings.HasPrefix(msg.results[0].Output, "Would delete branch old") {
-		t.Errorf("output = %q", msg.results[0].Output)
+	if !strings.HasPrefix(msg.results[0].String(), "Would delete branch old") {
+		t.Errorf("output = %q", msg.results[0].String())
 	}
 }
 
@@ -449,7 +449,7 @@ func TestCtrlCWaitsForDeletesToFinish(t *testing.T) {
 		t.Error("the screen should say it will quit when deletion finishes")
 	}
 
-	results := []deleteResult{{Name: "merged-feature", Output: "Deleted branch merged-feature (was abc1234)."}}
+	results := []deleteResult{{Name: "merged-feature", SHA: "abc1234"}}
 	next, cmd = m.Update(branchesDeletedMsg{results})
 	m = next.(model)
 	if len(m.history) != 1 {

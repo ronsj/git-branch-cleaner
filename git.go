@@ -36,13 +36,21 @@ func (b Branch) Protected(base string) bool {
 	return b.Current || b.Name == base || b.InOtherWorktree() || b.InProgress != ""
 }
 
-// deleteResult records the outcome of deleting one branch. Git prints
-// "Deleted branch foo (was abc1234)." on success, which is kept so the
-// branch can be restored later.
+// deleteResult records the outcome of deleting (or, in a dry run,
+// previewing) one branch.
 type deleteResult struct {
 	Name   string
-	Output string
+	SHA    string // commit the branch pointed to; `git branch Name SHA` restores it
+	DryRun bool
 	Err    error
+}
+
+func (r deleteResult) String() string {
+	short := r.SHA[:min(len(r.SHA), 7)]
+	if r.DryRun {
+		return fmt.Sprintf("Would delete branch %s (at %s).", r.Name, short)
+	}
+	return fmt.Sprintf("Deleted branch %s (was %s).", r.Name, short)
 }
 
 // git runs a git subcommand in the current directory and returns its stdout.
@@ -219,25 +227,21 @@ func readTrimmed(path string) string {
 	return strings.TrimSpace(string(data))
 }
 
-// restoreSHA extracts the commit from git's "Deleted branch foo (was abc1234)." message.
-func restoreSHA(output string) string {
-	i := strings.LastIndex(output, "(was ")
-	if i < 0 {
-		return ""
+// branchSHA returns the full commit a branch points to.
+func branchSHA(name string) (string, error) {
+	sha, err := git("rev-parse", "--verify", "--quiet", "refs/heads/"+name)
+	if err != nil {
+		return "", fmt.Errorf("branch %s no longer exists", name)
 	}
-	return strings.TrimSuffix(output[i+len("(was "):], ").")
+	return sha, nil
 }
 
 // previewDeletes reports what deleteBranches would do, without deleting anything.
 func previewDeletes(names []string) []deleteResult {
 	results := make([]deleteResult, 0, len(names))
 	for _, name := range names {
-		sha, err := git("rev-parse", "--short", "refs/heads/"+name)
-		var out string
-		if err == nil {
-			out = fmt.Sprintf("Would delete branch %s (at %s).", name, sha)
-		}
-		results = append(results, deleteResult{Name: name, Output: out, Err: err})
+		sha, err := branchSHA(name)
+		results = append(results, deleteResult{Name: name, SHA: sha, DryRun: true, Err: err})
 	}
 	return results
 }
@@ -245,12 +249,20 @@ func previewDeletes(names []string) []deleteResult {
 // deleteBranches force-deletes each branch. Force (-D) is deliberate: -d checks
 // against HEAD rather than the base branch, and the UI has already warned
 // about unmerged branches on the confirm screen.
+//
+// The commit each branch pointed to is read just before deleting it, for the
+// restore command. It comes from git directly rather than from git's
+// "Deleted branch x (was abc1234)." message, which is translated in some
+// languages.
 func deleteBranches(names []string) []deleteResult {
 	results := make([]deleteResult, 0, len(names))
 	for _, name := range names {
-		// "--" ends the options, so a name like "-r" isn't read as a flag.
-		out, err := git("branch", "-D", "--", name)
-		results = append(results, deleteResult{Name: name, Output: out, Err: err})
+		sha, err := branchSHA(name)
+		if err == nil {
+			// "--" ends the options, so a name like "-r" isn't read as a flag.
+			_, err = git("branch", "-D", "--", name)
+		}
+		results = append(results, deleteResult{Name: name, SHA: sha, Err: err})
 	}
 	return results
 }
