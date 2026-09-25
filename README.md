@@ -50,11 +50,10 @@ If you've set `GOBIN`, `go install` put the binary there instead:
 rm "$(go env GOBIN)/branch-cleaner"
 ```
 
-If you created the [demo repo](#try-it-on-a-demo-repo), remove it, its fake
-remote, and its extra worktree:
+If you created the [demo repo](#try-it-on-a-demo-repo), remove its folder:
 
 ```sh
-rm -rf /tmp/branch-cleaner-demo /tmp/branch-cleaner-demo-remote.git /tmp/branch-cleaner-demo-release
+rm -rf /tmp/branch-cleaner-demo
 ```
 
 ## Usage
@@ -164,10 +163,13 @@ a throwaway repo with merged, gone, unmerged, and worktree branches:
 ```sh
 go build -o branch-cleaner .
 scripts/demo-repo.sh                  # defaults to /tmp/branch-cleaner-demo
-cd /tmp/branch-cleaner-demo && ~/path/to/branch-cleaner
+cd /tmp/branch-cleaner-demo/repo && ~/path/to/branch-cleaner
 ```
 
-Run the script again at any time to reset the demo repo.
+The folder holds the repo (`repo/`), a fake remote (`remote.git/`), and a
+second worktree (`release/`). Run the script again at any time to reset it. To
+protect your files, the script only replaces a folder it created itself (or an
+empty one) and refuses any other path.
 
 ## Development
 

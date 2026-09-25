@@ -4,16 +4,30 @@
 set -euo pipefail
 
 dir="${1:-/tmp/branch-cleaner-demo}"
-# Make dir absolute with no trailing slash: the remote and worktree paths are
-# built as siblings of it and used after cd-ing into it.
-dir="${dir%/}"
-case "$dir" in /*) ;; *) dir="$PWD/$dir" ;; esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
-rm -rf "$dir" "$dir-remote.git" "$dir-release"
-git init -q --bare "$dir-remote.git"
-git init -q -b main "$dir"
-cd "$dir"
-git remote add origin "$dir-remote.git"
+
+# Everything goes inside $dir: the repo, a bare "remote", and a second
+# worktree. The marker file shows a folder was made by this script, so it's
+# the only kind of folder (besides an empty one) the script will replace.
+marker=".branch-cleaner-demo"
+if [ -e "$dir" ] && [ ! -f "$dir/$marker" ]; then
+  if [ ! -d "$dir" ] || [ -n "$(ls -A "$dir")" ]; then
+    echo "error: $dir already exists and wasn't made by this script; refusing to replace it." >&2
+    echo "If it's a demo repo from an older version of this script, delete it (and any" >&2
+    echo "$dir-remote.git and $dir-release folders next to it), then run this again." >&2
+    exit 1
+  fi
+fi
+rm -rf "$dir"
+mkdir -p "$dir"
+touch "$dir/$marker"
+dir="$(cd "$dir" && pwd)"
+repo="$dir/repo"
+
+git init -q --bare "$dir/remote.git"
+git init -q -b main "$repo"
+cd "$repo"
+git remote add origin "$dir/remote.git"
 
 # at <days-ago>: backdate the next commit or merge by that many days.
 at() {
@@ -61,7 +75,7 @@ merge 44 chore/deps
 git switch -qc release/2026-08 main
 commit 30 "Prepare August release notes" "Sam Lee"
 merge 29 release/2026-08
-git worktree add -q "$dir-release" release/2026-08
+git worktree add -q "$dir/release" release/2026-08
 
 # Pushed, then deleted on the remote (like a squash-merged PR) -> "gone".
 git switch -qc fix/header-typo main
@@ -76,4 +90,4 @@ commit 3 "Try a sidebar layout for the new navigation menu" "Priya Natarajan"
 git switch -q main
 
 git fetch -q --prune
-echo "Demo repo ready: cd $dir && $root/branch-cleaner"
+echo "Demo repo ready: cd $repo && $root/branch-cleaner"
