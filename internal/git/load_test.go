@@ -261,3 +261,34 @@ func TestLoadBranchesWithRemoteTrackingBase(t *testing.T) {
 		t.Error("without --base, feature isn't merged into local main")
 	}
 }
+
+// Rebase-merging a pull request puts copies of its commits on main with new
+// SHAs, so git branch --merged misses it; matching patches still count.
+func TestLoadBranchesDetectsRebaseMerges(t *testing.T) {
+	testrepo.New(t)
+	testrepo.Git(t, "switch", "-q", "-c", "rebased")
+	testrepo.CommitFile(t, ".", "one")
+	testrepo.CommitFile(t, ".", "two")
+	testrepo.Git(t, "switch", "-q", "-c", "partial")
+	testrepo.CommitFile(t, ".", "three")
+	testrepo.Git(t, "switch", "-q", "main")
+	testrepo.Git(t, "commit", "-q", "--allow-empty", "-m", "main work") // so the copies get new SHAs
+	testrepo.Git(t, "cherry-pick", "main..rebased")
+	// Merging main in adds a merge commit, which no patch on main matches.
+	testrepo.Git(t, "switch", "-q", "-c", "with-merge", "rebased")
+	testrepo.Git(t, "merge", "-q", "--no-edit", "main")
+	testrepo.Git(t, "switch", "-q", "main")
+
+	for _, tt := range []struct {
+		name   string
+		merged bool
+	}{
+		{"rebased", true},
+		{"partial", false},
+		{"with-merge", false},
+	} {
+		if got := loadBranch(t, tt.name).Merged; got != tt.merged {
+			t.Errorf("%s: Merged = %v, want %v", tt.name, got, tt.merged)
+		}
+	}
+}
