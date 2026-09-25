@@ -296,3 +296,22 @@ func TestSelectingProtectedBranchSaysWhy(t *testing.T) {
 		t.Error("the message should go away on the next key")
 	}
 }
+
+// With nothing to select, a would otherwise seem to do nothing at all.
+func TestSelectStaleWithNothingToSelectSaysSo(t *testing.T) {
+	branches := []git.Branch{{Name: "main", Merged: true}, {Name: "wip", Current: true, Merged: true}, {Name: "experiment"}}
+	next, _ := New(Options{}).Update(branchesLoadedMsg{base: "main", branches: branches})
+	m := press(next.(Model), "a")
+	if want := "No merged or gone branches to select"; !strings.Contains(m.render(), want) {
+		t.Fatalf("footer is missing %q:\n%s", want, m.render())
+	}
+
+	m = press(typeText(press(loadedModel(), "/"), "exp"), "enter", "a")
+	if want := "No merged or gone branches match the filter"; !strings.Contains(m.render(), want) {
+		t.Fatalf("footer is missing %q:\n%s", want, m.render())
+	}
+
+	if m = press(loadedModel(), "a"); m.notice != "" {
+		t.Errorf("notice = %q after selecting branches, want none", m.notice)
+	}
+}
