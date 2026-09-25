@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
@@ -27,5 +28,20 @@ func TestConfirmFitsShortTerminal(t *testing.T) {
 		if !strings.Contains(screen, want) {
 			t.Errorf("confirm screen is missing %q:\n%s", want, screen)
 		}
+	}
+}
+
+// With no base branch, merges weren't checked, so the confirm screen mustn't
+// claim the branches aren't merged into an empty name.
+func TestConfirmWithoutBase(t *testing.T) {
+	next, _ := New(Options{}).Update(branchesLoadedMsg{base: "", branches: []git.Branch{{Name: "old"}}})
+	screen := press(next.(Model), "space", "enter").render()
+	for _, want := range []string{"old  not checked", "weren't checked for merges", "--base"} {
+		if !strings.Contains(ansi.Strip(screen), want) {
+			t.Errorf("confirm screen is missing %q:\n%s", want, screen)
+		}
+	}
+	if strings.Contains(screen, "not merged into") {
+		t.Errorf("confirm screen names an empty base branch:\n%s", screen)
 	}
 }
