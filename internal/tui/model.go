@@ -57,6 +57,7 @@ type Model struct {
 	lastResults []git.DeleteResult // shown under the list after a delete
 	history     []git.DeleteResult // every delete (or dry-run preview) this session, printed on exit
 	quitting    bool               // ctrl+c came in mid-delete; quit once the results are in
+	notice      string             // why the last key did nothing, shown until the next key
 	err         error
 }
 

@@ -76,6 +76,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		m.notice = ""
 		// q quits too while loading or deleting: nothing else takes keys
 		// then, and the filter (where q is just a letter) can't be open.
 		if msg.String() == "ctrl+c" || m.busy() && key.Matches(msg, keys.Quit) {
@@ -121,7 +122,10 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, keys.Toggle):
-		if b, ok := m.cursorBranch(); ok && !b.Protected(m.base) {
+		b, ok := m.cursorBranch()
+		if ok && b.Protected(m.base) {
+			m.notice = "Can't select " + b.Name + ": " + b.ProtectedReason(m.base)
+		} else if ok {
 			m.selected = maps.Clone(m.selected)
 			if m.selected[b.Name] {
 				delete(m.selected, b.Name)

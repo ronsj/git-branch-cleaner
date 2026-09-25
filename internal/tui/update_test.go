@@ -284,3 +284,15 @@ func TestQQuitsWhileBusy(t *testing.T) {
 		t.Fatal("q mid-delete should quit once the results are in")
 	}
 }
+
+// Selecting a protected branch does nothing, so the footer says why.
+func TestSelectingProtectedBranchSaysWhy(t *testing.T) {
+	m := press(loadedModel(), "j", "j", "j", "space") // cursor on wip, the current branch
+	want := "Can't select wip: it's checked out"
+	if !strings.Contains(m.render(), want) {
+		t.Fatalf("footer is missing %q:\n%s", want, m.render())
+	}
+	if m = press(m, "k"); strings.Contains(m.render(), "Can't select") {
+		t.Error("the message should go away on the next key")
+	}
+}
