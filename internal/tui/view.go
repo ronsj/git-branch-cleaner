@@ -98,6 +98,9 @@ func (m Model) renderFooter(visible []git.Branch) string {
 	for _, line := range m.resultLines() {
 		s.WriteString(line + "\n")
 	}
+	if m.notice != "" {
+		s.WriteString(m.fitWidth(errorStyle.Render(m.notice)) + "\n")
+	}
 	s.WriteString(m.renderSelectionCount(visible) + "\n")
 	if m.filter.Focused() {
 		s.WriteString(mutedStyle.Render("type to filter • ↑/↓ move • enter done • esc clear"))
