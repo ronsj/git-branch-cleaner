@@ -42,10 +42,10 @@ type Model struct {
 	sortBy   sortOrder
 	state    state
 	base     string
-	branches []git.Branch // every local branch; see visibleBranches for the filtered list
-	selected map[string]bool
-	cursor   int // index into visibleBranches()
-	offset   int // index of the first visible row when the list scrolls
+	branches []git.Branch    // every local branch; see visibleBranches for the filtered list
+	selected map[string]bool // replaced, never changed in place: copies of Model share a map
+	cursor   int             // index into visibleBranches()
+	offset   int             // index of the first visible row when the list scrolls
 	width    int
 	height   int
 

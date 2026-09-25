@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"maps"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/spinner"
@@ -108,16 +110,18 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, keys.Toggle):
 		if b, ok := m.cursorBranch(); ok && !b.Protected(m.base) {
+			m.selected = maps.Clone(m.selected)
 			m.selected[b.Name] = !m.selected[b.Name]
 		}
 	case key.Matches(msg, keys.SelectStale):
+		m.selected = maps.Clone(m.selected)
 		for _, b := range m.visibleBranches() {
 			if (b.Merged || b.Gone) && !b.Protected(m.base) {
 				m.selected[b.Name] = true
 			}
 		}
 	case key.Matches(msg, keys.SelectNone):
-		clear(m.selected)
+		m.selected = make(map[string]bool)
 
 	case key.Matches(msg, keys.Delete):
 		if len(m.selectedNames()) > 0 {
@@ -179,7 +183,7 @@ func (m Model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Confirm):
 		selected := m.selectedBranches()
-		clear(m.selected)
+		m.selected = make(map[string]bool)
 		m.state = stateDeleting
 		return m, tea.Batch(deleteBranchesCmd(selected, m.base, m.DryRun), m.spinner.Tick)
 	case key.Matches(msg, keys.Cancel):

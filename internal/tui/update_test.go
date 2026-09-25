@@ -200,3 +200,23 @@ func TestCtrlCQuitsImmediatelyWhenNotDeleting(t *testing.T) {
 		t.Fatal("ctrl+c while browsing should quit right away")
 	}
 }
+
+// Update returns a new Model; earlier Model values must not change with it.
+// (A map is shared between copies of a struct, so this needs care.)
+func TestUpdateLeavesEarlierModelsUnchanged(t *testing.T) {
+	start := loadedModel()
+	selected := press(start, "j", "space", "a") // toggle, then select merged/gone
+	if n := len(start.selectedNames()); n != 0 {
+		t.Errorf("selecting changed the earlier model: it now has %d selected", n)
+	}
+
+	want := selected.selectedNames()
+	press(selected, "n") // select none
+	if got := selected.selectedNames(); !reflect.DeepEqual(got, want) {
+		t.Errorf("select none changed the earlier model: %v, want %v", got, want)
+	}
+	press(selected, "enter", "y") // confirming clears the selection
+	if got := selected.selectedNames(); !reflect.DeepEqual(got, want) {
+		t.Errorf("confirming changed the earlier model: %v, want %v", got, want)
+	}
+}
