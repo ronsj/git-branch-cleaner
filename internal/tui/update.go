@@ -57,6 +57,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		m.selected = stillSelected
+		m.widths = m.measureColumns()
 		m.moveCursorTo(cursorName)
 		return m, nil
 
@@ -120,7 +121,11 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, keys.Toggle):
 		if b, ok := m.cursorBranch(); ok && !b.Protected(m.base) {
 			m.selected = maps.Clone(m.selected)
-			m.selected[b.Name] = !m.selected[b.Name]
+			if m.selected[b.Name] {
+				delete(m.selected, b.Name)
+			} else {
+				m.selected[b.Name] = true
+			}
 		}
 	case key.Matches(msg, keys.SelectStale):
 		m.selected = maps.Clone(m.selected)
@@ -133,7 +138,7 @@ func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.selected = make(map[string]bool)
 
 	case key.Matches(msg, keys.Delete):
-		if len(m.selectedNames()) > 0 {
+		if len(m.selected) > 0 {
 			m.state = stateConfirming
 		}
 	case key.Matches(msg, keys.Sort):

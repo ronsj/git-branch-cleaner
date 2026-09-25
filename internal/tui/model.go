@@ -43,11 +43,12 @@ type Model struct {
 	state    state
 	base     string
 	branches []git.Branch    // every local branch; see visibleBranches for the filtered list
-	selected map[string]bool // replaced, never changed in place: copies of Model share a map
+	selected map[string]bool // only true values, so len is the count; replaced, never changed in place: copies of Model share a map
 	cursor   int             // index into visibleBranches()
 	offset   int             // index of the first visible row when the list scrolls
 	width    int
 	height   int
+	widths   columnWidths // of the list's columns, measured on each load
 
 	spinner spinner.Model
 	help    help.Model

@@ -16,7 +16,7 @@ func TestRowsFitTerminalWidth(t *testing.T) {
 	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 30})
 	m = next.(Model)
 
-	for line := range strings.SplitSeq(m.renderList(), "\n") {
+	for line := range strings.SplitSeq(m.renderList(m.visibleBranches(), m.listHeight()), "\n") {
 		if w := lipgloss.Width(line); w > 60 {
 			t.Errorf("line is %d cells wide, terminal is 60: %q", w, line)
 		}
@@ -27,7 +27,7 @@ func TestHiddenSelectionsAreCalledOut(t *testing.T) {
 	m := press(loadedModel(), "a") // selects merged-feature and gone-feature
 	m = press(typeText(press(m, "/"), "gone"), "enter")
 
-	if got := m.renderSelectionCount(); !strings.Contains(got, "2 selected (1 hidden by filter)") {
+	if got := m.renderSelectionCount(m.visibleBranches()); !strings.Contains(got, "2 selected (1 hidden by filter)") {
 		t.Fatalf("selection count = %q", got)
 	}
 	m = press(m, "enter")
