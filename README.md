@@ -184,7 +184,10 @@ go vet ./...
 | File | Contents |
 | --- | --- |
 | `main.go` | Starts the program and prints restore commands on exit |
-| `model.go` | Bubble Tea model: state, `Update`, and `View` |
+| `model.go` | Bubble Tea model: state, messages, commands, and derived state like the visible list |
+| `update.go` | `Update`: how key presses and messages change the state |
+| `view.go` | `View`: rendering the list, header, footer, and confirm screen |
+| `sort.go` | Sort orders |
 | `git.go` | Runs git commands and parses their output |
 | `keys.go` | Key bindings and help text |
 | `styles.go` | Lip Gloss styles |
