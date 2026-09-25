@@ -27,7 +27,8 @@ func TestLoadBranchesDetectsRebaseInProgress(t *testing.T) {
 	if feature.InProgress != "rebasing" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked rebasing", feature)
 	}
-	if results := DeleteBranches(branchesNamed(t, "feature"), "main"); results[0].Err == nil {
+	// Ask git directly: the app skips protected branches before git sees them.
+	if _, err := git("branch", "-D", "--", "feature"); err == nil {
 		t.Error("expected git to refuse deleting a branch that's being rebased")
 	}
 }
@@ -52,7 +53,8 @@ func TestLoadBranchesDetectsBisectInOtherWorktree(t *testing.T) {
 	if feature.InProgress != "bisecting" || !feature.Protected("main") {
 		t.Errorf("feature = %+v, want protected and marked bisecting", feature)
 	}
-	if results := DeleteBranches(branchesNamed(t, "feature"), "main"); results[0].Err == nil {
+	// Ask git directly: the app skips protected branches before git sees them.
+	if _, err := git("branch", "-D", "--", "feature"); err == nil {
 		t.Error("expected git to refuse deleting a branch that's being bisected")
 	}
 }

@@ -96,7 +96,7 @@ func (m Model) loadBranchesCmd() tea.Cmd {
 func deleteBranchesCmd(branches []git.Branch, base string, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
 		if dryRun {
-			return branchesDeletedMsg{git.PreviewDeletes(branches)}
+			return branchesDeletedMsg{git.PreviewDeletes(branches, base)}
 		}
 		return branchesDeletedMsg{git.DeleteBranches(branches, base)}
 	}

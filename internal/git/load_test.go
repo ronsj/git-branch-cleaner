@@ -129,7 +129,8 @@ func TestLoadBranchesDetectsOtherWorktrees(t *testing.T) {
 	}
 
 	// The protection matches git's own rule: it refuses this delete.
-	if results := DeleteBranches(branchesNamed(t, "review"), "main"); results[0].Err == nil {
+	// Ask git directly: the app skips protected branches before git sees them.
+	if _, err := git("branch", "-D", "--", "review"); err == nil {
 		t.Error("expected git to refuse deleting a branch checked out in a worktree")
 	}
 }

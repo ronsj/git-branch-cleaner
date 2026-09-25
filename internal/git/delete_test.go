@@ -31,7 +31,7 @@ func TestPreviewDeletesKeepsBranches(t *testing.T) {
 
 	old := loadBranch(t, "old")
 
-	results := PreviewDeletes([]Branch{old})
+	results := PreviewDeletes([]Branch{old}, "main")
 
 	if results[0].Err != nil || results[0].SHA != testrepo.Git(t, "rev-parse", "refs/heads/old") {
 		t.Errorf("preview of old = %+v, want its current commit", results[0])
@@ -73,7 +73,7 @@ func TestDeleteBranchNamedLikeAnOption(t *testing.T) {
 		testrepo.Git(t, "update-ref", "refs/heads/"+name, "HEAD")
 	}
 
-	for _, r := range PreviewDeletes(branchesNamed(t, "-r", "--all")) {
+	for _, r := range PreviewDeletes(branchesNamed(t, "-r", "--all"), "main") {
 		if r.Err != nil {
 			t.Errorf("preview of %q: %v", r.Name, r.Err)
 		}
@@ -167,5 +167,46 @@ func TestDeleteSkipsBranchNoLongerMerged(t *testing.T) {
 	}
 	if !testrepo.BranchExists("done") {
 		t.Fatal("a branch that stopped being merged must not be deleted without a warning")
+	}
+}
+
+// A dry run must predict the real run: after the same changes since loading,
+// both should act on, and skip, the same branches.
+func TestPreviewMatchesDelete(t *testing.T) {
+	testrepo.New(t)
+	testrepo.CommitFile(t, ".", "second")
+	testrepo.Git(t, "branch", "ok", "HEAD~1")
+	testrepo.Git(t, "branch", "moved")
+	testrepo.Git(t, "branch", "lost-merge")
+	testrepo.Git(t, "branch", "busy", "HEAD~1")
+	testrepo.Git(t, "branch", "gone", "HEAD~1")
+	names := []string{"ok", "moved", "lost-merge", "busy", "gone"}
+	loaded := branchesNamed(t, names...)
+
+	// What can happen between loading the list and confirming:
+	testrepo.Git(t, "switch", "-q", "moved")
+	testrepo.CommitFile(t, ".", "new work on moved") // new commit
+	testrepo.Git(t, "switch", "-q", "main")
+	testrepo.Git(t, "reset", "-q", "--hard", "HEAD~1") // lost-merge is no longer merged
+	testrepo.Git(t, "worktree", "add", "-q", filepath.Join(t.TempDir(), "wt"), "busy")
+	testrepo.Git(t, "branch", "-D", "gone")
+
+	preview := PreviewDeletes(loaded, "main")
+	for _, name := range []string{"ok", "moved", "lost-merge", "busy"} {
+		if !testrepo.BranchExists(name) {
+			t.Fatalf("the dry run deleted %s", name)
+		}
+	}
+	deleted := DeleteBranches(loaded, "main")
+
+	for i, name := range names {
+		wouldDelete, didDelete := preview[i].Err == nil, deleted[i].Err == nil
+		if wouldDelete != didDelete {
+			t.Errorf("%s: dry run would delete = %v (%v), real run deleted = %v (%v)",
+				name, wouldDelete, preview[i].Err, didDelete, deleted[i].Err)
+		}
+		if want := name == "ok"; didDelete != want {
+			t.Errorf("%s: deleted = %v, want %v (%v)", name, didDelete, want, deleted[i].Err)
+		}
 	}
 }

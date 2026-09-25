@@ -23,13 +23,61 @@ func (r DeleteResult) String() string {
 }
 
 // PreviewDeletes reports what DeleteBranches would do, without deleting
-// anything. It uses the commits recorded when the branches were loaded.
-func PreviewDeletes(branches []Branch) []DeleteResult {
+// anything: it makes the same checks, so it skips the same branches.
+func PreviewDeletes(branches []Branch, base string) []DeleteResult {
+	ready, skipped, err := recheck(branches, base)
+	if err != nil {
+		return failAll(branches, err)
+	}
 	results := make([]DeleteResult, 0, len(branches))
 	for _, b := range branches {
-		results = append(results, DeleteResult{Name: b.Name, SHA: b.SHA, DryRun: true})
+		if err, ok := skipped[b.Name]; ok {
+			results = append(results, DeleteResult{Name: b.Name, DryRun: true, Err: err})
+			continue
+		}
+		results = append(results, DeleteResult{Name: b.Name, SHA: ready[b.Name], DryRun: true})
 	}
 	return results
+}
+
+// recheck compares the selected branches, as they were loaded (possibly
+// minutes ago), with how they are now. It returns the commit of each branch
+// that's still safe to delete, and the reason each other one isn't: it no
+// longer exists, it points at a different commit, it was merged into base
+// and no longer is, or it has become protected (checked out, or in use by a
+// rebase or bisect).
+func recheck(branches []Branch, base string) (ready map[string]string, skipped map[string]error, err error) {
+	_, current, err := LoadBranches(base)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := make(map[string]Branch, len(current))
+	for _, b := range current {
+		now[b.Name] = b
+	}
+
+	ready = make(map[string]string)
+	skipped = make(map[string]error)
+	for _, b := range branches {
+		c, exists := now[b.Name]
+		switch {
+		case !exists:
+			skipped[b.Name] = fmt.Errorf("branch %s no longer exists", b.Name)
+		case c.SHA != b.SHA:
+			skipped[b.Name] = fmt.Errorf("skipped %s: it changed since you selected it", b.Name)
+		case b.Merged && !c.Merged:
+			skipped[b.Name] = fmt.Errorf("skipped %s: it's no longer merged into %s", b.Name, base)
+		case c.Current:
+			skipped[b.Name] = fmt.Errorf("skipped %s: it's checked out", b.Name)
+		case c.InOtherWorktree():
+			skipped[b.Name] = fmt.Errorf("skipped %s: it's checked out in another worktree", b.Name)
+		case c.InProgress != "":
+			skipped[b.Name] = fmt.Errorf("skipped %s: it's in use (%s)", b.Name, c.InProgress)
+		default:
+			ready[b.Name] = c.SHA
+		}
+	}
+	return ready, skipped, nil
 }
 
 // deleteBatchSize caps how many names go into one `git branch -D` call,
@@ -41,37 +89,20 @@ const deleteBatchSize = 200
 // warned about unmerged branches on the confirm screen.
 //
 // That warning was based on the branches as loaded, possibly minutes ago, so
-// a branch is skipped if it has changed since: if it now points at a
-// different commit, or was merged into base and no longer is.
+// recheck skips any branch that has changed since.
 //
-// For speed, it reads every branch's commit once, deletes in batches (one git
-// process per branch is ~25x slower), then reads again to see what's gone.
-// Commits come from git directly rather than from its "Deleted branch x (was
-// abc1234)." message, which is translated in some languages.
+// For speed, it deletes in batches (one git process per branch is ~25x
+// slower), then reads the branches again to see what's gone. Commits come
+// from git directly rather than from its "Deleted branch x (was abc1234)."
+// message, which is translated in some languages.
 func DeleteBranches(branches []Branch, base string) []DeleteResult {
-	before, err := branchSHAs()
+	ready, skipped, err := recheck(branches, base)
 	if err != nil {
 		return failAll(branches, err)
 	}
-	var merged map[string]bool
-	if base != "" {
-		if merged, err = mergedInto(base); err != nil {
-			return failAll(branches, err)
-		}
-	}
-
-	skipped := make(map[string]error)
 	var names []string
 	for _, b := range branches {
-		sha, exists := before[b.Name]
-		switch {
-		case !exists:
-			skipped[b.Name] = fmt.Errorf("branch %s no longer exists", b.Name)
-		case sha != b.SHA:
-			skipped[b.Name] = fmt.Errorf("skipped %s: it changed since you selected it", b.Name)
-		case b.Merged && merged != nil && !merged[b.Name]:
-			skipped[b.Name] = fmt.Errorf("skipped %s: it's no longer merged into %s", b.Name, base)
-		default:
+		if _, ok := ready[b.Name]; ok {
 			names = append(names, b.Name)
 		}
 	}
@@ -92,14 +123,13 @@ func DeleteBranches(branches []Branch, base string) []DeleteResult {
 			results = append(results, DeleteResult{Name: b.Name, Err: err})
 			continue
 		}
-		sha := before[b.Name]
 		var err error
 		if _, remains := after[b.Name]; remains {
-			// Git refused (in a worktree, say). Try once more on its own to
-			// get git's reason for this branch.
+			// Git refused anyway. Try once more on its own to get git's
+			// reason for this branch.
 			_, err = git("branch", "-D", "--", b.Name)
 		}
-		results = append(results, DeleteResult{Name: b.Name, SHA: sha, Err: err})
+		results = append(results, DeleteResult{Name: b.Name, SHA: ready[b.Name], Err: err})
 	}
 	return results
 }
