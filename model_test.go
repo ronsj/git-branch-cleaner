@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -12,19 +13,28 @@ import (
 
 // Update is a pure function of (model, msg), so it can be tested like a reducer.
 
-func loadedModel() model {
-	m := newModel(false)
-	next, _ := m.Update(branchesLoadedMsg{
-		base: "main",
-		branches: []Branch{
-			{Name: "main", Merged: true},
-			{Name: "merged-feature", Merged: true},
-			{Name: "gone-feature", Gone: true},
-			{Name: "wip", Current: true},
-			{Name: "experiment"},
-		},
-	})
+func daysAgo(n int) time.Time {
+	return time.Now().Add(-time.Duration(n) * 24 * time.Hour)
+}
+
+// testBranches are listed oldest first, which is the default sort order.
+func testBranches() []Branch {
+	return []Branch{
+		{Name: "main", Merged: true, CommitTime: daysAgo(90)},
+		{Name: "merged-feature", Merged: true, CommitTime: daysAgo(60)},
+		{Name: "gone-feature", Gone: true, CommitTime: daysAgo(40)},
+		{Name: "wip", Current: true, CommitTime: daysAgo(2)},
+		{Name: "experiment", CommitTime: daysAgo(1)},
+	}
+}
+
+func loadedModelWith(opts options) model {
+	next, _ := newModel(opts).Update(branchesLoadedMsg{base: "main", branches: testBranches()})
 	return next.(model)
+}
+
+func loadedModel() model {
+	return loadedModelWith(options{})
 }
 
 func press(m model, keys ...string) model {
@@ -238,7 +248,7 @@ func runCmd(cmd tea.Cmd) []tea.Msg {
 // confirms deletion, returning the result message.
 func confirmDelete(t *testing.T, dryRun bool, name string) branchesDeletedMsg {
 	t.Helper()
-	next, _ := newModel(dryRun).Update(loadBranchesCmd())
+	next, _ := newModel(options{dryRun: dryRun}).Update(loadBranchesCmd())
 	m := next.(model)
 	m.selected[name] = true
 	m = press(m, "enter")
@@ -289,7 +299,7 @@ func TestConfirmFitsShortTerminal(t *testing.T) {
 	for i := range 30 {
 		branches = append(branches, Branch{Name: fmt.Sprintf("old-%02d", i), Merged: true})
 	}
-	next, _ := newModel(true).Update(branchesLoadedMsg{base: "main", branches: branches})
+	next, _ := newModel(options{dryRun: true}).Update(branchesLoadedMsg{base: "main", branches: branches})
 	next, _ = next.Update(tea.WindowSizeMsg{Width: 80, Height: 16})
 	m := press(next.(model), "a", "enter")
 
@@ -301,5 +311,65 @@ func TestConfirmFitsShortTerminal(t *testing.T) {
 		if !strings.Contains(screen, want) {
 			t.Errorf("confirm screen is missing %q:\n%s", want, screen)
 		}
+	}
+}
+
+func TestSortCyclesAndKeepsCursor(t *testing.T) {
+	m := press(loadedModel(), "j") // cursor on merged-feature
+
+	m = press(m, "s")
+	want := []string{"experiment", "wip", "gone-feature", "merged-feature", "main"}
+	if got := visibleNames(m); !reflect.DeepEqual(got, want) {
+		t.Fatalf("newest first = %v, want %v", got, want)
+	}
+	if b, _ := m.cursorBranch(); b.Name != "merged-feature" {
+		t.Fatalf("cursor moved to %q after sorting", b.Name)
+	}
+
+	m = press(m, "s")
+	want = []string{"experiment", "gone-feature", "main", "merged-feature", "wip"}
+	if got := visibleNames(m); !reflect.DeepEqual(got, want) {
+		t.Fatalf("by name = %v, want %v", got, want)
+	}
+
+	m = press(m, "s")
+	if m.sortBy != sortOldest {
+		t.Fatalf("sort should cycle back to oldest first, got %v", m.sortBy)
+	}
+}
+
+func TestSortSurvivesReload(t *testing.T) {
+	m := press(loadedModel(), "s") // newest first
+	next, _ := m.Update(branchesLoadedMsg{base: "main", branches: testBranches()})
+	if got := visibleNames(next.(model))[0]; got != "experiment" {
+		t.Fatalf("after reload the newest branch should still be first, got %q", got)
+	}
+}
+
+func TestOlderThanHidesRecentBranches(t *testing.T) {
+	m := loadedModelWith(options{olderThanDays: 30})
+	want := []string{"main", "merged-feature", "gone-feature"}
+	if got := visibleNames(m); !reflect.DeepEqual(got, want) {
+		t.Fatalf("visible %v, want %v", got, want)
+	}
+	if header := m.renderHeader(); !strings.Contains(header, "2 newer than 30 days hidden") {
+		t.Errorf("header should say how many are hidden: %q", header)
+	}
+}
+
+func TestOlderThanAndFilterCombine(t *testing.T) {
+	m := typeText(press(loadedModelWith(options{olderThanDays: 30}), "/"), "e")
+	// "e" matches merged-feature, gone-feature, and experiment, but
+	// experiment is only a day old.
+	want := []string{"merged-feature", "gone-feature"}
+	if got := visibleNames(m); !reflect.DeepEqual(got, want) {
+		t.Fatalf("visible %v, want %v", got, want)
+	}
+}
+
+func TestOlderThanHidingEverything(t *testing.T) {
+	m := loadedModelWith(options{olderThanDays: 365})
+	if screen := m.render(); !strings.Contains(screen, "No branches are older than 365 days.") {
+		t.Errorf("expected an explanation when every branch is hidden:\n%s", screen)
 	}
 }

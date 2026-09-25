@@ -4,18 +4,21 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Branch is one local git branch plus the metadata shown in the UI.
 type Branch struct {
 	Name       string
-	LastCommit string // relative date, e.g. "3 weeks ago"
-	Current    bool   // checked out right now
-	Gone       bool   // upstream was deleted on the remote (often a squash-merged PR)
-	Merged     bool   // fully merged into the base branch
-	Author     string // author of the last commit
-	Subject    string // first line of the last commit message
+	LastCommit string    // relative date for display, e.g. "3 weeks ago"
+	CommitTime time.Time // exact date, for sorting and age checks
+	Current    bool      // checked out right now
+	Gone       bool      // upstream was deleted on the remote (often a squash-merged PR)
+	Merged     bool      // fully merged into the base branch
+	Author     string    // author of the last commit
+	Subject    string    // first line of the last commit message
 }
 
 // Protected reports whether the UI should refuse to delete this branch.
@@ -54,9 +57,9 @@ func git(args ...string) (string, error) {
 // The fields are tab-separated (%09) so branch names never collide with the
 // separator. The commit subject goes last because it's free text: splitting
 // into at most branchFields parts keeps any tabs inside it intact.
-const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(HEAD)%09%(upstream:track)%09%(authorname)%09%(contents:subject)"
+const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(committerdate:unix)%09%(HEAD)%09%(upstream:track)%09%(authorname)%09%(contents:subject)"
 
-const branchFields = 6
+const branchFields = 7
 
 // parseBranches turns `git for-each-ref --format=branchFormat` output into Branches.
 func parseBranches(out string) []Branch {
@@ -69,13 +72,17 @@ func parseBranches(out string) []Branch {
 		if len(fields) < branchFields {
 			continue
 		}
+		// A bad timestamp parses as 0, i.e. 1970, so the branch just looks
+		// very old; not worth dropping the branch over.
+		unix, _ := strconv.ParseInt(fields[2], 10, 64)
 		branches = append(branches, Branch{
 			Name:       fields[0],
 			LastCommit: fields[1],
-			Current:    fields[2] == "*",
-			Gone:       fields[3] == "[gone]",
-			Author:     fields[4],
-			Subject:    fields[5],
+			CommitTime: time.Unix(unix, 0),
+			Current:    fields[3] == "*",
+			Gone:       fields[4] == "[gone]",
+			Author:     fields[5],
+			Subject:    fields[6],
 		})
 	}
 	return branches
@@ -99,9 +106,10 @@ func baseBranch() string {
 	return current
 }
 
-// loadBranches lists local branches, oldest first, and marks which are merged into base.
+// loadBranches lists local branches and marks which are merged into base.
+// The UI decides the order (see sortBranches).
 func loadBranches() (base string, branches []Branch, err error) {
-	out, err := git("for-each-ref", "--sort=committerdate", "--format="+branchFormat, "refs/heads/")
+	out, err := git("for-each-ref", "--format="+branchFormat, "refs/heads/")
 	if err != nil {
 		return "", nil, err
 	}

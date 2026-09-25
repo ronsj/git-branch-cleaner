@@ -5,20 +5,23 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseBranches(t *testing.T) {
-	out := "old-feature\t3 months ago\t \t[gone]\tAlex Kim\tAdd login form\n" +
-		"main\t2 days ago\t*\t\tSam Lee\tMerge feature/login\n" +
-		"wip\t5 minutes ago\t \t[ahead 2]\tSam Lee\tWIP: tabs\tin subject\n" +
-		"empty-subject\t1 year, 2 months ago\t \t\tAlex Kim\t\n"
+	out := "old-feature\t3 months ago\t1750000000\t \t[gone]\tAlex Kim\tAdd login form\n" +
+		"main\t2 days ago\t1757000000\t*\t\tSam Lee\tMerge feature/login\n" +
+		"wip\t5 minutes ago\t1757100000\t \t[ahead 2]\tSam Lee\tWIP: tabs\tin subject\n" +
+		"empty-subject\t1 year, 2 months ago\t1720000000\t \t\tAlex Kim\t\n" +
+		"bad-time\t1 day ago\tnot-a-number\t \t\tAlex Kim\tOdd\n"
 
 	got := parseBranches(out)
 	want := []Branch{
-		{Name: "old-feature", LastCommit: "3 months ago", Gone: true, Author: "Alex Kim", Subject: "Add login form"},
-		{Name: "main", LastCommit: "2 days ago", Current: true, Author: "Sam Lee", Subject: "Merge feature/login"},
-		{Name: "wip", LastCommit: "5 minutes ago", Author: "Sam Lee", Subject: "WIP: tabs\tin subject"},
-		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", Author: "Alex Kim"},
+		{Name: "old-feature", LastCommit: "3 months ago", CommitTime: time.Unix(1750000000, 0), Gone: true, Author: "Alex Kim", Subject: "Add login form"},
+		{Name: "main", LastCommit: "2 days ago", CommitTime: time.Unix(1757000000, 0), Current: true, Author: "Sam Lee", Subject: "Merge feature/login"},
+		{Name: "wip", LastCommit: "5 minutes ago", CommitTime: time.Unix(1757100000, 0), Author: "Sam Lee", Subject: "WIP: tabs\tin subject"},
+		{Name: "empty-subject", LastCommit: "1 year, 2 months ago", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim"},
+		{Name: "bad-time", LastCommit: "1 day ago", CommitTime: time.Unix(0, 0), Author: "Alex Kim", Subject: "Odd"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseBranches:\n got  %+v\n want %+v", got, want)
@@ -104,6 +107,9 @@ func TestLoadBranches(t *testing.T) {
 	}
 	if wip := byName["wip"]; wip.Merged || !wip.Current || wip.Subject != "Work in progress" {
 		t.Errorf("wip = %+v, want unmerged, current, with its commit subject", wip)
+	}
+	if age := time.Since(byName["wip"].CommitTime); age < 0 || age > time.Minute {
+		t.Errorf("wip was committed just now, but CommitTime is %v ago", age)
 	}
 }
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -33,8 +35,59 @@ type (
 	errMsg             struct{ err error }
 )
 
+// sortOrder is the order branches are listed in; s cycles through them.
+type sortOrder int
+
+const (
+	sortOldest sortOrder = iota
+	sortNewest
+	sortName
+	numSortOrders // not an order; keeps next() in range
+)
+
+// String makes sortOrder a fmt.Stringer, so it prints as text in the header.
+func (o sortOrder) String() string {
+	switch o {
+	case sortNewest:
+		return "newest first"
+	case sortName:
+		return "by name"
+	default:
+		return "oldest first"
+	}
+}
+
+func (o sortOrder) next() sortOrder {
+	return (o + 1) % numSortOrders
+}
+
+// sortBranches returns a sorted copy of branches. Ties (same commit time)
+// fall back to the name so the order never shuffles between reloads.
+func sortBranches(branches []Branch, order sortOrder) []Branch {
+	sorted := slices.Clone(branches)
+	slices.SortStableFunc(sorted, func(a, b Branch) int {
+		byName := cmp.Compare(a.Name, b.Name)
+		switch order {
+		case sortNewest:
+			return cmp.Or(b.CommitTime.Compare(a.CommitTime), byName)
+		case sortName:
+			return byName
+		default:
+			return cmp.Or(a.CommitTime.Compare(b.CommitTime), byName)
+		}
+	})
+	return sorted
+}
+
+// options are the settings chosen on the command line.
+type options struct {
+	dryRun        bool // preview deletions instead of running them
+	olderThanDays int  // hide branches with commits newer than this; 0 shows all
+}
+
 type model struct {
-	dryRun   bool // preview deletions instead of running them
+	options
+	sortBy   sortOrder
 	state    state
 	base     string
 	branches []Branch // every local branch; see visibleBranches for the filtered list
@@ -53,13 +106,13 @@ type model struct {
 	err         error
 }
 
-func newModel(dryRun bool) model {
+func newModel(opts options) model {
 	filter := textinput.New()
 	filter.Prompt = "/ "
 	filter.Placeholder = "filter by name"
 
 	return model{
-		dryRun:   dryRun,
+		options:  opts,
 		state:    stateLoading,
 		selected: make(map[string]bool),
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(selectedStyle)),
@@ -120,7 +173,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.state = stateBrowsing
 		m.base = msg.base
-		m.branches = msg.branches
+		m.branches = sortBranches(msg.branches, m.sortBy)
 		m.err = nil
 		// Drop selections for branches that no longer exist.
 		for name := range m.selected {
@@ -128,14 +181,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				delete(m.selected, name)
 			}
 		}
-		// Keep the cursor on the same branch if it's still visible.
-		visible := m.visibleBranches()
-		if i := indexOf(visible, cursorName); i >= 0 {
-			m.cursor = i
-		} else {
-			m.cursor = min(m.cursor, max(len(visible)-1, 0))
-		}
-		m.scrollToCursor()
+		m.moveCursorTo(cursorName)
 		return m, nil
 
 	case branchesDeletedMsg:
@@ -201,6 +247,11 @@ func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if len(m.selectedNames()) > 0 {
 			m.state = stateConfirming
 		}
+	case key.Matches(msg, keys.Sort):
+		b, _ := m.cursorBranch()
+		m.sortBy = m.sortBy.next()
+		m.branches = sortBranches(m.branches, m.sortBy)
+		m.moveCursorTo(b.Name)
 	case key.Matches(msg, keys.Refresh):
 		m.state = stateLoading
 		m.lastResults = nil
@@ -265,20 +316,42 @@ func (m model) busy() bool {
 	return m.state == stateLoading || m.state == stateDeleting
 }
 
-// visibleBranches returns the branches whose names match the filter,
-// case-insensitively. With no filter, that's all of them.
+// visibleBranches returns the branches shown in the list: those not hidden
+// by --older-than whose names match the filter, case-insensitively.
 func (m model) visibleBranches() []Branch {
 	query := strings.ToLower(strings.TrimSpace(m.filter.Value()))
-	if query == "" {
+	if query == "" && m.olderThanDays == 0 {
 		return m.branches
 	}
 	var visible []Branch
 	for _, b := range m.branches {
-		if strings.Contains(strings.ToLower(b.Name), query) {
-			visible = append(visible, b)
+		if m.tooRecent(b) {
+			continue
 		}
+		if query != "" && !strings.Contains(strings.ToLower(b.Name), query) {
+			continue
+		}
+		visible = append(visible, b)
 	}
 	return visible
+}
+
+// tooRecent reports whether --older-than hides b.
+func (m model) tooRecent(b Branch) bool {
+	minAge := time.Duration(m.olderThanDays) * 24 * time.Hour
+	return m.olderThanDays > 0 && time.Since(b.CommitTime) < minAge
+}
+
+// moveCursorTo puts the cursor on the named branch if it's visible, and
+// otherwise keeps the cursor in bounds.
+func (m *model) moveCursorTo(name string) {
+	visible := m.visibleBranches()
+	if i := indexOf(visible, name); i >= 0 {
+		m.cursor = i
+	} else {
+		m.cursor = min(m.cursor, max(len(visible)-1, 0))
+	}
+	m.scrollToCursor()
 }
 
 // cursorBranch returns the branch under the cursor, if the list isn't empty.
@@ -346,14 +419,7 @@ func (m model) View() tea.View {
 func (m model) render() string {
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("Branch Cleaner"))
-	if m.dryRun {
-		s.WriteString(dryRunStyle.Render("  DRY RUN"))
-	}
-	if m.base != "" {
-		s.WriteString(mutedStyle.Render("  base: " + m.base))
-	}
-	s.WriteString("\n")
+	s.WriteString(m.renderHeader() + "\n")
 	// The filter takes the blank line under the title, so the list doesn't jump.
 	if m.state == stateBrowsing && (m.filter.Focused() || m.filter.Value() != "") {
 		s.WriteString(m.filter.View())
@@ -385,8 +451,10 @@ func (m model) render() string {
 	switch {
 	case len(m.branches) == 0:
 		s.WriteString(mutedStyle.Render("No local branches found.") + "\n")
-	case len(m.visibleBranches()) == 0:
+	case len(m.visibleBranches()) == 0 && m.filter.Value() != "":
 		s.WriteString(mutedStyle.Render(fmt.Sprintf("No branches match %q.", m.filter.Value())) + "\n")
+	case len(m.visibleBranches()) == 0:
+		s.WriteString(mutedStyle.Render(fmt.Sprintf("No branches are older than %s.", days(m.olderThanDays))) + "\n")
 	default:
 		s.WriteString(m.renderList())
 	}
@@ -410,6 +478,44 @@ func (m model) render() string {
 		s.WriteString(m.help.View(k))
 	}
 	return s.String()
+}
+
+// renderHeader is the title line: app name, dry-run badge, base branch,
+// sort order, and how many branches --older-than is hiding.
+func (m model) renderHeader() string {
+	header := titleStyle.Render("Branch Cleaner")
+	if m.dryRun {
+		header += dryRunStyle.Render("  DRY RUN")
+	}
+
+	var info []string
+	if m.base != "" {
+		info = append(info, "base: "+m.base)
+	}
+	info = append(info, m.sortBy.String())
+	if m.olderThanDays > 0 {
+		hidden := 0
+		for _, b := range m.branches {
+			if m.tooRecent(b) {
+				hidden++
+			}
+		}
+		info = append(info, fmt.Sprintf("%d newer than %s hidden", hidden, days(m.olderThanDays)))
+	}
+	header += mutedStyle.Render("  " + strings.Join(info, " · "))
+
+	if m.width > 0 {
+		header = ansi.Truncate(header, m.width, "…")
+	}
+	return header
+}
+
+// days formats a day count: "1 day", "30 days".
+func days(n int) string {
+	if n == 1 {
+		return "1 day"
+	}
+	return fmt.Sprintf("%d days", n)
 }
 
 // renderSelectionCount shows how many branches are selected, calling out any

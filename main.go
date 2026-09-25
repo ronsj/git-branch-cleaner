@@ -10,6 +10,7 @@ import (
 
 func main() {
 	dryRun := flag.Bool("dry-run", false, "show what would be deleted without deleting anything")
+	olderThan := flag.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: branch-cleaner [flags]\n\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
@@ -21,8 +22,13 @@ func main() {
 		flag.Usage()
 		os.Exit(2)
 	}
+	if *olderThan < 0 {
+		fmt.Fprintf(os.Stderr, "-older-than must be 0 or more days, got %d\n", *olderThan)
+		os.Exit(2)
+	}
 
-	final, err := tea.NewProgram(newModel(*dryRun)).Run()
+	opts := options{dryRun: *dryRun, olderThanDays: *olderThan}
+	final, err := tea.NewProgram(newModel(opts)).Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)

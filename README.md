@@ -6,7 +6,7 @@ A terminal UI for finding and deleting stale local git branches, built with
 [Lip Gloss](https://github.com/charmbracelet/lipgloss).
 
 ```
-Branch Cleaner  base: main
+Branch Cleaner  base: main · oldest first
 
   [x] chore/deps          3 weeks ago    merged        Alex Kim         Bump dependencies
 > [ ] experiment/new-nav  2 weeks ago                  Priya Natarajan  Try a sidebar layout for th…
@@ -66,19 +66,31 @@ cd path/to/your/repo
 branch-cleaner
 ```
 
-To see what would be deleted without deleting anything, add `--dry-run`:
+Branches are listed oldest first, so the stalest ones are at the top; press
+`s` to switch to newest first or by name. Each row shows the branch's last
+commit: when it was made, who wrote it, and its message. Rows that don't fit
+your terminal are cut off with `…`.
+
+### Flags
+
+| Flag | Effect |
+| --- | --- |
+| `--dry-run` | Show what would be deleted without deleting anything |
+| `--older-than N` | Hide branches whose last commit is less than `N` days old |
+
+With `--dry-run`, the whole UI works the same, with a **DRY RUN** badge in the
+title. Confirming a delete lists each branch and the commit it points to
+instead of deleting it.
+
+`--older-than` is handy for skipping work that's still in progress:
 
 ```sh
-branch-cleaner --dry-run
+branch-cleaner --older-than 30
 ```
 
-The whole UI works the same, with a **DRY RUN** badge in the title. Confirming
-a delete lists each branch and the commit it points to instead of deleting it.
-Run `branch-cleaner -h` to see all flags.
-
-Branches are listed oldest first, so the stalest ones are at the top. Each row
-shows the branch's last commit: when it was made, who wrote it, and its
-message. Rows that don't fit your terminal are cut off with `…`.
+The header shows how many branches it's hiding (for example
+`2 newer than 30 days hidden`). Flags can be combined, and
+`branch-cleaner -h` lists them all.
 
 ### Keys
 
@@ -91,6 +103,7 @@ message. Rows that don't fit your terminal are cut off with `…`.
 | `/` | Filter branches by name |
 | `esc` | Clear the filter |
 | `enter` / `d` | Delete the selected branches (asks for confirmation) |
+| `s` | Change sort order: oldest first, newest first, by name |
 | `r` | Reload the branch list |
 | `?` | Show all keys |
 | `q` / `ctrl+c` | Quit |
