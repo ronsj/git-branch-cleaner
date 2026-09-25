@@ -38,15 +38,18 @@ func TestParseBranches(t *testing.T) {
 		row("wip", "1757100000", " ", "[ahead 2]", "/work/odd\tpath\nwith newline", "Sam Lee", "WIP: tabs\tin subject", "cccc333"),
 		row("empty-subject", "1720000000", " ", "", "", "Alex Kim", "", "dddd444"),
 		row("bad-time", "not-a-number", " ", "", "", "Alex Kim", "", "eeee555"),
+		// A terminal would act on these instead of showing them.
+		row("escapes", "1720000000", " ", "", "", "\x1b[31mMallory", "Fix\r\x1b]8;;https://evil.example\x07link\u009b2J", "ffff666"),
 	)
 
 	got := parseBranches(out)
 	want := []Branch{
 		{Name: "old-feature", CommitTime: time.Unix(1750000000, 0), Gone: true, Worktree: "/work/review", Author: "Alex Kim", Subject: "Add login form", SHA: "aaaa111"},
 		{Name: "main", CommitTime: time.Unix(1757000000, 0), Current: true, Worktree: "/work/app", Author: "Sam Lee", Subject: "Merge feature/login", SHA: "bbbb222"},
-		{Name: "wip", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs\tin subject", SHA: "cccc333"},
+		{Name: "wip", CommitTime: time.Unix(1757100000, 0), Worktree: "/work/odd\tpath\nwith newline", Author: "Sam Lee", Subject: "WIP: tabs in subject", SHA: "cccc333"},
 		{Name: "empty-subject", CommitTime: time.Unix(1720000000, 0), Author: "Alex Kim", SHA: "dddd444"},
 		{Name: "bad-time", CommitTime: time.Unix(0, 0), Author: "Alex Kim", SHA: "eeee555"},
+		{Name: "escapes", CommitTime: time.Unix(1720000000, 0), Author: "[31mMallory", Subject: "Fix]8;;https://evil.examplelink2J", SHA: "ffff666"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("parseBranches:\n got  %+v\n want %+v", got, want)
