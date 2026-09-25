@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"strings"
@@ -30,15 +30,15 @@ type (
 	errMsg             struct{ err error }
 )
 
-// options are the settings chosen on the command line.
-type options struct {
-	dryRun        bool   // preview deletions instead of running them
-	olderThanDays int    // hide branches with commits newer than this; 0 shows all
-	baseOverride  string // compare against this branch; "" detects it
+// Options are the settings chosen on the command line.
+type Options struct {
+	DryRun        bool   // preview deletions instead of running them
+	OlderThanDays int    // hide branches with commits newer than this; 0 shows all
+	BaseOverride  string // compare against this branch; "" detects it
 }
 
-type model struct {
-	options
+type Model struct {
+	Options
 	sortBy   sortOrder
 	state    state
 	base     string
@@ -59,13 +59,13 @@ type model struct {
 	err         error
 }
 
-func newModel(opts options) model {
+func New(opts Options) Model {
 	filter := textinput.New()
 	filter.Prompt = "/ "
 	filter.Placeholder = "filter by name"
 
-	return model{
-		options:  opts,
+	return Model{
+		Options:  opts,
 		state:    stateLoading,
 		selected: make(map[string]bool),
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(selectedStyle)),
@@ -74,10 +74,16 @@ func newModel(opts options) model {
 	}
 }
 
+// History returns every delete (or dry-run preview) made this session, for
+// the summary printed on exit.
+func (m Model) History() []git.DeleteResult {
+	return m.history
+}
+
 // Commands run off the UI loop; whatever they return is sent to Update.
 
-func (m model) loadBranchesCmd() tea.Cmd {
-	baseOverride := m.baseOverride // captured: the command runs in the background
+func (m Model) loadBranchesCmd() tea.Cmd {
+	baseOverride := m.BaseOverride // captured: the command runs in the background
 	return func() tea.Msg {
 		base, branches, err := git.LoadBranches(baseOverride)
 		if err != nil {
@@ -96,19 +102,19 @@ func deleteBranchesCmd(branches []git.Branch, base string, dryRun bool) tea.Cmd 
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.loadBranchesCmd(), m.spinner.Tick, tea.RequestBackgroundColor)
 }
 
-func (m model) busy() bool {
+func (m Model) busy() bool {
 	return m.state == stateLoading || m.state == stateDeleting
 }
 
 // visibleBranches returns the branches shown in the list: those not hidden
 // by --older-than whose names match the filter, case-insensitively.
-func (m model) visibleBranches() []git.Branch {
+func (m Model) visibleBranches() []git.Branch {
 	query := strings.ToLower(strings.TrimSpace(m.filter.Value()))
-	if query == "" && m.olderThanDays == 0 {
+	if query == "" && m.OlderThanDays == 0 {
 		return m.branches
 	}
 	var visible []git.Branch
@@ -125,14 +131,14 @@ func (m model) visibleBranches() []git.Branch {
 }
 
 // tooRecent reports whether --older-than hides b.
-func (m model) tooRecent(b git.Branch) bool {
-	minAge := time.Duration(m.olderThanDays) * 24 * time.Hour
-	return m.olderThanDays > 0 && time.Since(b.CommitTime) < minAge
+func (m Model) tooRecent(b git.Branch) bool {
+	minAge := time.Duration(m.OlderThanDays) * 24 * time.Hour
+	return m.OlderThanDays > 0 && time.Since(b.CommitTime) < minAge
 }
 
 // moveCursorTo puts the cursor on the named branch if it's visible, and
 // otherwise keeps the cursor in bounds.
-func (m *model) moveCursorTo(name string) {
+func (m *Model) moveCursorTo(name string) {
 	visible := m.visibleBranches()
 	if i := indexOf(visible, name); i >= 0 {
 		m.cursor = i
@@ -143,7 +149,7 @@ func (m *model) moveCursorTo(name string) {
 }
 
 // cursorBranch returns the branch under the cursor, if the list isn't empty.
-func (m model) cursorBranch() (git.Branch, bool) {
+func (m Model) cursorBranch() (git.Branch, bool) {
 	visible := m.visibleBranches()
 	if m.cursor < len(visible) {
 		return visible[m.cursor], true
@@ -153,7 +159,7 @@ func (m model) cursorBranch() (git.Branch, bool) {
 
 // selectedBranches returns selected branches in list order (maps are
 // unordered in Go).
-func (m model) selectedBranches() []git.Branch {
+func (m Model) selectedBranches() []git.Branch {
 	var selected []git.Branch
 	for _, b := range m.branches {
 		if m.selected[b.Name] {
@@ -163,7 +169,7 @@ func (m model) selectedBranches() []git.Branch {
 	return selected
 }
 
-func (m model) selectedNames() []string {
+func (m Model) selectedNames() []string {
 	var names []string
 	for _, b := range m.selectedBranches() {
 		names = append(names, b.Name)
@@ -182,7 +188,7 @@ func indexOf(branches []git.Branch, name string) int {
 
 // scrollToCursor adjusts offset so the cursor row stays visible.
 // It has a pointer receiver because it mutates the model in place.
-func (m *model) scrollToCursor() {
+func (m *Model) scrollToCursor() {
 	rows := m.listHeight()
 	if m.cursor < m.offset {
 		m.offset = m.cursor

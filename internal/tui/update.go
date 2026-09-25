@@ -1,4 +1,4 @@
-package main
+package tui
 
 import (
 	"charm.land/bubbles/v2/help"
@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -92,7 +92,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Quit):
 		return m, tea.Quit
@@ -147,7 +147,7 @@ func (m model) updateBrowsing(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // updateFiltering handles keys while the filter input is focused. Letters go
 // to the input, so j/k type instead of moving; the arrow keys still move.
-func (m model) updateFiltering(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateFiltering(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter":
 		m.filter.Blur()
@@ -170,18 +170,18 @@ func (m model) updateFiltering(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // setFilter replaces the filter text and moves the cursor back to the top.
-func (m *model) setFilter(value string) {
+func (m *Model) setFilter(value string) {
 	m.filter.SetValue(value)
 	m.cursor, m.offset = 0, 0
 }
 
-func (m model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, keys.Confirm):
 		selected := m.selectedBranches()
 		clear(m.selected)
 		m.state = stateDeleting
-		return m, tea.Batch(deleteBranchesCmd(selected, m.base, m.dryRun), m.spinner.Tick)
+		return m, tea.Batch(deleteBranchesCmd(selected, m.base, m.DryRun), m.spinner.Tick)
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateBrowsing
 	}

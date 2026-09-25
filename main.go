@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/ronsj/git-branch-cleaner/internal/git"
+	"github.com/ronsj/git-branch-cleaner/internal/tui"
 )
 
 func main() {
@@ -29,11 +30,11 @@ func main() {
 		os.Exit(2)
 	}
 
-	opts := options{dryRun: *dryRun, olderThanDays: *olderThan, baseOverride: *base}
-	final, err := tea.NewProgram(newModel(opts)).Run()
+	opts := tui.Options{DryRun: *dryRun, OlderThanDays: *olderThan, BaseOverride: *base}
+	final, err := tea.NewProgram(tui.New(opts)).Run()
 	// Run returns the last model even when it fails, and branches may already
 	// have been deleted, so print the history before reporting the error.
-	if m, ok := final.(model); ok {
+	if m, ok := final.(tui.Model); ok {
 		printHistory(m)
 	}
 	if err != nil {
@@ -44,11 +45,11 @@ func main() {
 
 // printHistory prints what was deleted, with restore commands. The alt screen
 // is cleared on exit, so this is the copy that stays in the terminal.
-func printHistory(m model) {
-	if m.dryRun && len(m.history) > 0 {
+func printHistory(m tui.Model) {
+	if m.DryRun && len(m.History()) > 0 {
 		fmt.Println("Dry run: no branches were deleted.")
 	}
-	for _, r := range m.history {
+	for _, r := range m.History() {
 		if r.Err != nil {
 			continue
 		}
