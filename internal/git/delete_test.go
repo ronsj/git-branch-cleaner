@@ -3,6 +3,7 @@ package git
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -211,5 +212,40 @@ func TestPreviewMatchesDelete(t *testing.T) {
 		if want := name == "ok"; didDelete != want {
 			t.Errorf("%s: deleted = %v, want %v (%v)", name, didDelete, want, deleted[i].Err)
 		}
+	}
+}
+
+// forceDelete reads the commit from git's own message: it's the one that was
+// actually deleted, even if the branch moved after recheck looked at it.
+func TestForceDeleteRecordsDeletedCommits(t *testing.T) {
+	testrepo.New(t, "plain", "we(ird")
+	tip := testrepo.Git(t, "rev-parse", "HEAD")
+	testrepo.Git(t, "update-ref", "refs/heads/-r", tip) // git branch -r would list remotes
+	t.Setenv("LANG", "de_DE.UTF-8")                     // LC_ALL=C must win over the user's locale
+	t.Setenv("LC_ALL", "de_DE.UTF-8")
+
+	deleted := make(map[string]string)
+	err := forceDelete([]string{"plain", "-r", "we(ird", "missing"}, deleted)
+	if err == nil {
+		t.Error("expected an error for the missing branch")
+	}
+	want := map[string]string{"plain": tip, "-r": tip, "we(ird": tip}
+	if !maps.Equal(deleted, want) {
+		t.Errorf("deleted = %v, want %v", deleted, want)
+	}
+}
+
+func TestFullSHA(t *testing.T) {
+	testrepo.New(t)
+	tip := testrepo.Git(t, "rev-parse", "HEAD")
+	testrepo.CommitFile(t, ".", "moved on")
+	moved := testrepo.Git(t, "rev-parse", "HEAD")
+
+	if got := fullSHA(tip[:12], tip); got != tip {
+		t.Errorf("fullSHA of the expected commit = %q, want %q", got, tip)
+	}
+	// The branch moved between recheck and the delete: record where it was.
+	if got := fullSHA(moved[:12], tip); got != moved {
+		t.Errorf("fullSHA of a different commit = %q, want %q", got, moved)
 	}
 }

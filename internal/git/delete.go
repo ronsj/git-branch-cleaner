@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // DeleteResult records the outcome of deleting (or, in a dry run,
@@ -100,10 +101,12 @@ const deleteBatchSize = 200
 // That warning was based on the branches as loaded, possibly minutes ago, so
 // recheck skips any branch that has changed since.
 //
+// A branch can still move between that check and the delete. Git reports
+// the commit it actually deleted, so that's the one recorded for the restore
+// command, and no commits are lost without a way back.
+//
 // For speed, it deletes in batches (one git process per branch is ~25x
-// slower), then reads the branches again to see what's gone. Commits come
-// from git directly rather than from its "Deleted branch x (was abc1234)."
-// message, which is translated in some languages.
+// slower), then reads the branches again to see what's gone.
 func DeleteBranches(branches []Branch, base string) []DeleteResult {
 	ready, skipped, err := recheck(branches, base)
 	if err != nil {
@@ -115,11 +118,11 @@ func DeleteBranches(branches []Branch, base string) []DeleteResult {
 			names = append(names, b.Name)
 		}
 	}
+	deleted := make(map[string]string) // name -> commit git says it deleted
 	for batch := range slices.Chunk(names, deleteBatchSize) {
 		// Errors are ignored here: git deletes what it can, and the check
-		// below works out which branches are gone. "--" ends the options, so
-		// a name like "-r" isn't read as a flag.
-		git(append([]string{"branch", "-D", "--"}, batch...)...)
+		// below works out which branches are gone.
+		forceDelete(batch, deleted)
 	}
 	// If this read fails, every attempted branch counts as deleted (after is
 	// nil): keeping its SHA keeps its restore command, and running that for a
@@ -136,11 +139,50 @@ func DeleteBranches(branches []Branch, base string) []DeleteResult {
 		if _, remains := after[b.Name]; remains {
 			// Git refused anyway. Try once more on its own to get git's
 			// reason for this branch.
-			_, err = git("branch", "-D", "--", b.Name)
+			err = forceDelete([]string{b.Name}, deleted)
 		}
-		results = append(results, DeleteResult{Name: b.Name, SHA: ready[b.Name], Err: err})
+		sha := ready[b.Name]
+		if was, ok := deleted[b.Name]; ok && err == nil {
+			sha = fullSHA(was, sha)
+		}
+		results = append(results, DeleteResult{Name: b.Name, SHA: sha, Err: err})
 	}
 	return results
+}
+
+// forceDelete runs `git branch -D` on names and adds the commit each deleted
+// branch pointed to, as git reports it, to deleted. LC_ALL=C keeps git's
+// "Deleted branch x (was abc1234)." message untranslated so it can be read,
+// and core.abbrev=40 makes it show the whole SHA-1 (or, in a SHA-256 repo,
+// plenty to look the commit up by). "--" ends the options, so a name like
+// "-r" isn't read as a flag.
+func forceDelete(names []string, deleted map[string]string) error {
+	out, err := run([]string{"LC_ALL=C"}, []string{"core.abbrev=40"},
+		append([]string{"branch", "-D", "--"}, names...)...)
+	for line := range strings.SplitSeq(out, "\n") {
+		rest, ok := strings.CutPrefix(line, "Deleted branch ")
+		if !ok {
+			continue
+		}
+		// Branch names can't contain spaces, so the first " (was " is the one.
+		if name, sha, ok := strings.Cut(strings.TrimSuffix(rest, ")."), " (was "); ok {
+			deleted[name] = sha
+		}
+	}
+	return err
+}
+
+// fullSHA turns the commit git printed on deleting a branch into a full SHA:
+// expected (the one recheck saw) if it matches, since it usually will, and
+// otherwise whatever git can expand it to.
+func fullSHA(printed, expected string) string {
+	if strings.HasPrefix(expected, printed) {
+		return expected
+	}
+	if sha, err := git("rev-parse", "--verify", "--quiet", printed+"^{commit}"); err == nil {
+		return sha
+	}
+	return printed
 }
 
 func failAll(branches []Branch, err error) []DeleteResult {
