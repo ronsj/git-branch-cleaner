@@ -14,6 +14,8 @@ type Branch struct {
 	Current    bool   // checked out right now
 	Gone       bool   // upstream was deleted on the remote (often a squash-merged PR)
 	Merged     bool   // fully merged into the base branch
+	Author     string // author of the last commit
+	Subject    string // first line of the last commit message
 }
 
 // Protected reports whether the UI should refuse to delete this branch.
@@ -49,8 +51,12 @@ func git(args ...string) (string, error) {
 	return strings.TrimRight(string(out), "\r\n"), nil
 }
 
-// The fields are tab-separated (%09) so branch names never collide with the separator.
-const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(HEAD)%09%(upstream:track)"
+// The fields are tab-separated (%09) so branch names never collide with the
+// separator. The commit subject goes last because it's free text: splitting
+// into at most branchFields parts keeps any tabs inside it intact.
+const branchFormat = "%(refname:short)%09%(committerdate:relative)%09%(HEAD)%09%(upstream:track)%09%(authorname)%09%(contents:subject)"
+
+const branchFields = 6
 
 // parseBranches turns `git for-each-ref --format=branchFormat` output into Branches.
 func parseBranches(out string) []Branch {
@@ -59,8 +65,8 @@ func parseBranches(out string) []Branch {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		fields := strings.Split(line, "\t")
-		if len(fields) < 4 {
+		fields := strings.SplitN(line, "\t", branchFields)
+		if len(fields) < branchFields {
 			continue
 		}
 		branches = append(branches, Branch{
@@ -68,6 +74,8 @@ func parseBranches(out string) []Branch {
 			LastCommit: fields[1],
 			Current:    fields[2] == "*",
 			Gone:       fields[3] == "[gone]",
+			Author:     fields[4],
+			Subject:    fields[5],
 		})
 	}
 	return branches

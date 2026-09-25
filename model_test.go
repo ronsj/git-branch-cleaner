@@ -2,9 +2,11 @@ package main
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // Update is a pure function of (model, msg), so it can be tested like a reducer.
@@ -105,5 +107,18 @@ func TestDeleteRequiresConfirmation(t *testing.T) {
 	m = press(m, "n")
 	if m.state != stateBrowsing || len(m.selectedNames()) != 2 {
 		t.Fatal("cancel should return to the list and keep the selection")
+	}
+}
+
+func TestRowsFitTerminalWidth(t *testing.T) {
+	m := loadedModel()
+	m.branches[1].Subject = strings.Repeat("a very long commit subject ", 10)
+	next, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 30})
+	m = next.(model)
+
+	for line := range strings.SplitSeq(m.renderList(), "\n") {
+		if w := lipgloss.Width(line); w > 60 {
+			t.Errorf("line is %d cells wide, terminal is 60: %q", w, line)
+		}
 	}
 }
