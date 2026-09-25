@@ -11,41 +11,59 @@ git init -q -b main "$dir"
 cd "$dir"
 git remote add origin "$dir-remote.git"
 
-# commit <message> [author]: author defaults to your git config.
+# at <days-ago>: backdate the next commit or merge by that many days.
+at() {
+  local when="$(( $(date +%s) - $1 * 86400 )) +0000"
+  export GIT_AUTHOR_DATE="$when" GIT_COMMITTER_DATE="$when"
+}
+
+# commit <days-ago> <message> [author]: author defaults to your git config.
 commit() {
-  echo "$1" >> log.txt
+  at "$1"
+  echo "$2" >> log.txt
   git add log.txt
-  if [ -n "${2:-}" ]; then
-    git commit -qm "$1" --author "$2 <${2// /.}@example.com>"
+  if [ -n "${3:-}" ]; then
+    git commit -qm "$2" --author "$3 <${3// /.}@example.com>"
   else
-    git commit -qm "$1"
+    git commit -qm "$2"
   fi
 }
 
-commit "initial"
+# merge <days-ago> <branch>: merge branch into main.
+merge() {
+  at "$1"
+  git switch -q main
+  git merge -q --no-ff "$2" -m "Merge $2"
+}
+
+commit 500 "initial"
 git push -qu origin main
 git remote set-head origin main
 
+# Abandoned long ago, never merged.
+git switch -qc spike/graphql-api
+commit 430 "Spike: expose branches over GraphQL" "Jordan Park"
+
 # Merged into main.
-git switch -qc feature/login
-commit "Add login form with email validation" "Alex Kim"
-git switch -q main
-git merge -q --no-ff feature/login -m "Merge feature/login"
+git switch -qc feature/login main
+commit 75 "Add login form with email validation" "Alex Kim"
+merge 70 feature/login
+
+git switch -qc chore/deps main
+commit 45 "Bump dependencies" "Alex Kim"
+merge 44 chore/deps
 
 # Pushed, then deleted on the remote (like a squash-merged PR) -> "gone".
-git switch -qc fix/header-typo
-commit "Fix typo in header" "Sam Lee"
+git switch -qc fix/header-typo main
+commit 20 "Fix typo in header" "Sam Lee"
 git push -qu origin fix/header-typo
 git push -q origin --delete fix/header-typo
 
-# Unmerged work in progress.
+# Recent, unmerged work in progress.
 git switch -qc experiment/new-nav main
-commit "Try a sidebar layout for the new navigation menu" "Priya Natarajan"
+commit 3 "Try a sidebar layout for the new navigation menu" "Priya Natarajan"
 
-git switch -qc chore/deps main
-commit "Bump dependencies" "Alex Kim"
 git switch -q main
-git merge -q --no-ff chore/deps -m "Merge chore/deps"
 
 git fetch -q --prune
 echo "Demo repo ready: cd $dir && $root/branch-cleaner"
