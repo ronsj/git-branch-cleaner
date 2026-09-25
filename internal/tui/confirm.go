@@ -13,19 +13,30 @@ func (m Model) renderConfirm() string {
 		heading, keyHint = "Preview deleting these branches?", "y to preview • n/esc to cancel"
 	}
 
+	// Without a base branch, merges couldn't be checked at all, so say that
+	// rather than claim the branches aren't merged.
+	label := "  not merged"
+	if m.base == "" {
+		label = "  not checked"
+	}
+
 	var list []string
 	unmerged := 0
 	for _, b := range m.selectedBranches() {
 		line := "  " + b.Name
 		if !b.Merged {
 			unmerged++
-			line += warnStyle.Render("  not merged")
+			line += warnStyle.Render(label)
 		}
 		list = append(list, line)
 	}
 
 	var notes []string
-	if unmerged > 0 {
+	switch {
+	case unmerged > 0 && m.base == "":
+		notes = append(notes, warnStyle.Render(fmt.Sprintf(
+			"%d branch(es) weren't checked for merges, since no base branch was\nfound (see --base). Their commits will only be recoverable via the\nSHA printed after deletion.", unmerged)))
+	case unmerged > 0:
 		notes = append(notes, warnStyle.Render(fmt.Sprintf(
 			"%d branch(es) are not merged into %s. Their commits will only be\nrecoverable via the SHA printed after deletion.", unmerged, m.base)))
 	}
