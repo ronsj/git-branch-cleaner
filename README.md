@@ -66,6 +66,16 @@ cd path/to/your/repo
 branch-cleaner
 ```
 
+To see what would be deleted without deleting anything, add `--dry-run`:
+
+```sh
+branch-cleaner --dry-run
+```
+
+The whole UI works the same, with a **DRY RUN** badge in the title. Confirming
+a delete lists each branch and the commit it points to instead of deleting it.
+Run `branch-cleaner -h` to see all flags.
+
 Branches are listed oldest first, so the stalest ones are at the top. Each row
 shows the branch's last commit: when it was made, who wrote it, and its
 message. Rows that don't fit your terminal are cut off with `…`.
@@ -133,8 +143,8 @@ Run the restore command to bring a branch back. If you've lost the output,
 
 ## Try it on a demo repo
 
-To try branch-cleaner without touching real work, create a throwaway repo
-with merged, gone, and unmerged branches:
+To try branch-cleaner without touching real work, use `--dry-run` or create
+a throwaway repo with merged, gone, and unmerged branches:
 
 ```sh
 go build -o branch-cleaner .

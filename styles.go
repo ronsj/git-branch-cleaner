@@ -19,6 +19,7 @@ var (
 	goneStyle     = lipgloss.NewStyle().Foreground(yellow)
 	errorStyle    = lipgloss.NewStyle().Foreground(red)
 	warnStyle     = lipgloss.NewStyle().Bold(true).Foreground(red)
+	dryRunStyle   = lipgloss.NewStyle().Bold(true).Foreground(yellow)
 
 	confirmBox = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

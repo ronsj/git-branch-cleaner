@@ -33,6 +33,7 @@ type (
 )
 
 type model struct {
+	dryRun   bool // preview deletions instead of running them
 	state    state
 	base     string
 	branches []Branch // every local branch; see visibleBranches for the filtered list
@@ -47,16 +48,17 @@ type model struct {
 	filter  textinput.Model // focused while the user is typing a filter
 
 	lastResults []deleteResult // shown under the list after a delete
-	deleted     []deleteResult // everything deleted this session, printed on exit
+	history     []deleteResult // every delete (or dry-run preview) this session, printed on exit
 	err         error
 }
 
-func newModel() model {
+func newModel(dryRun bool) model {
 	filter := textinput.New()
 	filter.Prompt = "/ "
 	filter.Placeholder = "filter by name"
 
 	return model{
+		dryRun:   dryRun,
 		state:    stateLoading,
 		selected: make(map[string]bool),
 		spinner:  spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(selectedStyle)),
@@ -75,8 +77,11 @@ func loadBranchesCmd() tea.Msg {
 	return branchesLoadedMsg{base, branches}
 }
 
-func deleteBranchesCmd(names []string) tea.Cmd {
+func deleteBranchesCmd(names []string, dryRun bool) tea.Cmd {
 	return func() tea.Msg {
+		if dryRun {
+			return branchesDeletedMsg{previewDeletes(names)}
+		}
 		return branchesDeletedMsg{deleteBranches(names)}
 	}
 }
@@ -134,7 +139,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case branchesDeletedMsg:
 		m.lastResults = msg.results
-		m.deleted = append(m.deleted, msg.results...)
+		m.history = append(m.history, msg.results...)
 		m.state = stateLoading
 		return m, loadBranchesCmd
 
@@ -248,7 +253,7 @@ func (m model) updateConfirming(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		names := m.selectedNames()
 		clear(m.selected)
 		m.state = stateDeleting
-		return m, tea.Batch(deleteBranchesCmd(names), m.spinner.Tick)
+		return m, tea.Batch(deleteBranchesCmd(names, m.dryRun), m.spinner.Tick)
 	case key.Matches(msg, keys.Cancel):
 		m.state = stateBrowsing
 	}
@@ -341,6 +346,9 @@ func (m model) render() string {
 	var s strings.Builder
 
 	s.WriteString(titleStyle.Render("Branch Cleaner"))
+	if m.dryRun {
+		s.WriteString(dryRunStyle.Render("  DRY RUN"))
+	}
 	if m.base != "" {
 		s.WriteString(mutedStyle.Render("  base: " + m.base))
 	}
@@ -362,7 +370,11 @@ func (m model) render() string {
 		s.WriteString(m.spinner.View() + " Loading branches…")
 		return s.String()
 	case stateDeleting:
-		s.WriteString(m.spinner.View() + " Deleting branches…")
+		if m.dryRun {
+			s.WriteString(m.spinner.View() + " Previewing deletions…")
+		} else {
+			s.WriteString(m.spinner.View() + " Deleting branches…")
+		}
 		return s.String()
 	case stateConfirming:
 		s.WriteString(m.renderConfirm())
@@ -510,7 +522,11 @@ func padRight(s string, width int) string {
 
 func (m model) renderConfirm() string {
 	var s strings.Builder
-	s.WriteString("Delete these branches?\n\n")
+	if m.dryRun {
+		s.WriteString("Preview deleting these branches?\n\n")
+	} else {
+		s.WriteString("Delete these branches?\n\n")
+	}
 
 	unmerged := 0
 	for _, name := range m.selectedNames() {
@@ -527,6 +543,11 @@ func (m model) renderConfirm() string {
 			"%d branch(es) are not merged into %s. Their commits will only be\nrecoverable via the SHA printed after deletion.", unmerged, m.base)))
 		s.WriteString("\n")
 	}
-	s.WriteString("\n" + mutedStyle.Render("y to delete • n/esc to cancel"))
+	if m.dryRun {
+		s.WriteString("\n" + dryRunStyle.Render("Dry run: nothing will actually be deleted.") + "\n")
+		s.WriteString("\n" + mutedStyle.Render("y to preview • n/esc to cancel"))
+	} else {
+		s.WriteString("\n" + mutedStyle.Render("y to delete • n/esc to cancel"))
+	}
 	return confirmBox.Render(s.String())
 }

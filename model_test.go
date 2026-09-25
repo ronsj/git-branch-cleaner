@@ -12,7 +12,7 @@ import (
 // Update is a pure function of (model, msg), so it can be tested like a reducer.
 
 func loadedModel() model {
-	m := newModel()
+	m := newModel(false)
 	next, _ := m.Update(branchesLoadedMsg{
 		base: "main",
 		branches: []Branch{
@@ -213,5 +213,72 @@ func TestToggleOnEmptyFilterResult(t *testing.T) {
 	m := press(typeText(press(loadedModel(), "/"), "nope"), "enter", "space")
 	if len(m.selectedNames()) != 0 {
 		t.Fatal("toggling with no visible branches should do nothing")
+	}
+}
+
+// runCmd runs a command, including every command inside a tea.Batch, and
+// returns the messages they produce.
+func runCmd(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var msgs []tea.Msg
+		for _, c := range batch {
+			msgs = append(msgs, runCmd(c)...)
+		}
+		return msgs
+	}
+	return []tea.Msg{msg}
+}
+
+// confirmDelete loads the branches in the current repo, selects name, and
+// confirms deletion, returning the result message.
+func confirmDelete(t *testing.T, dryRun bool, name string) branchesDeletedMsg {
+	t.Helper()
+	next, _ := newModel(dryRun).Update(loadBranchesCmd())
+	m := next.(model)
+	m.selected[name] = true
+	m = press(m, "enter")
+
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	for _, msg := range runCmd(cmd) {
+		if deleted, ok := msg.(branchesDeletedMsg); ok {
+			return deleted
+		}
+	}
+	t.Fatal("confirming produced no branchesDeletedMsg")
+	return branchesDeletedMsg{}
+}
+
+func TestDryRunConfirmKeepsBranch(t *testing.T) {
+	newTestRepo(t, "old")
+	msg := confirmDelete(t, true, "old")
+	if !branchExists("old") {
+		t.Fatal("dry run deleted the branch")
+	}
+	if !strings.HasPrefix(msg.results[0].Output, "Would delete branch old") {
+		t.Errorf("output = %q", msg.results[0].Output)
+	}
+}
+
+func TestConfirmDeletesBranch(t *testing.T) {
+	newTestRepo(t, "old")
+	confirmDelete(t, false, "old")
+	if branchExists("old") {
+		t.Fatal("confirming without dry run should delete the branch")
+	}
+}
+
+func TestDryRunIsVisible(t *testing.T) {
+	m := loadedModel()
+	m.dryRun = true
+	if !strings.Contains(m.render(), "DRY RUN") {
+		t.Error("list view should show the DRY RUN badge")
+	}
+	m = press(m, "a", "enter")
+	if !strings.Contains(m.renderConfirm(), "nothing will actually be deleted") {
+		t.Error("confirm screen should say nothing will be deleted")
 	}
 }

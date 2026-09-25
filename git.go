@@ -135,6 +135,20 @@ func restoreSHA(output string) string {
 	return strings.TrimSuffix(output[i+len("(was "):], ").")
 }
 
+// previewDeletes reports what deleteBranches would do, without deleting anything.
+func previewDeletes(names []string) []deleteResult {
+	results := make([]deleteResult, 0, len(names))
+	for _, name := range names {
+		sha, err := git("rev-parse", "--short", "refs/heads/"+name)
+		var out string
+		if err == nil {
+			out = fmt.Sprintf("Would delete branch %s (at %s).", name, sha)
+		}
+		results = append(results, deleteResult{Name: name, Output: out, Err: err})
+	}
+	return results
+}
+
 // deleteBranches force-deletes each branch. Force (-D) is deliberate: -d checks
 // against HEAD rather than the base branch, and the UI has already warned
 // about unmerged branches on the confirm screen.
