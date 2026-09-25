@@ -114,7 +114,8 @@ func baseBranch() string {
 }
 
 // LoadBranches lists local branches and marks which are merged into the base
-// branch: baseOverride if set (--base), otherwise a guess (see baseBranch).
+// branch, directly or by a rebase merge (see rebaseMergedInto): baseOverride
+// if set (--base), otherwise a guess (see baseBranch).
 // baseOverride can name a local branch or a remote-tracking one, such as
 // origin/main, which is often ahead of the local main.
 // The UI decides the order.
@@ -143,7 +144,14 @@ func LoadBranches(baseOverride string) (base string, branches []Branch, err erro
 			return "", nil, err
 		}
 		for i := range branches {
-			branches[i].Merged = isMerged[branches[i].Name]
+			b := &branches[i]
+			b.Merged = isMerged[b.Name]
+			if b.Merged || b.IsBase(base) {
+				continue
+			}
+			if b.Merged, err = rebaseMergedInto(baseRef, b.Name); err != nil {
+				return "", nil, err
+			}
 		}
 	}
 
@@ -179,6 +187,31 @@ func mergedInto(baseRef string) (map[string]bool, error) {
 		merged[strings.TrimSpace(name)] = true
 	}
 	return merged, nil
+}
+
+// rebaseMergedInto reports whether every commit on branch has an identical
+// copy (same patch-id) in baseRef, as after a pull request is rebase-merged:
+// the copies get new SHAs, so git branch --merged misses them. A squash merge
+// combines the commits into one, so it still isn't detected.
+//
+// rev-list marks each commit on the branch side "=" if the base has an
+// equivalent and "+" if not. Merge commits are always "+", so a branch with
+// merges of its own never counts: a merge can carry changes no patch-id
+// covers.
+func rebaseMergedInto(baseRef, branch string) (bool, error) {
+	out, err := git("rev-list", "--cherry-mark", "--right-only", baseRef+"...refs/heads/"+branch, "--")
+	if err != nil {
+		return false, err
+	}
+	if out == "" {
+		return false, nil
+	}
+	for line := range strings.SplitSeq(out, "\n") {
+		if !strings.HasPrefix(line, "=") {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // branchSHAs returns the commit every local branch points to, in one git call.

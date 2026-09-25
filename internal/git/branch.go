@@ -14,7 +14,7 @@ type Branch struct {
 	InProgress string    // "rebasing" or "bisecting" if a worktree is doing that to it
 	Upstream   string    // full ref of the branch it tracks, if any
 	Gone       bool      // upstream was deleted on the remote (often a squash-merged PR)
-	Merged     bool      // fully merged into the base branch
+	Merged     bool      // fully merged into the base branch, or rebase-merged
 	Author     string    // author of the last commit
 	Subject    string    // first line of the last commit message
 }
