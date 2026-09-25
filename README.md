@@ -192,6 +192,10 @@ go test ./...
 go vet ./...
 ```
 
+CI (`.github/workflows/ci.yml`) also checks formatting with `gofmt` and runs
+[staticcheck](https://staticcheck.dev) and
+[govulncheck](https://go.dev/doc/tutorial/govulncheck).
+
 | Path | Contents |
 | --- | --- |
 | `main.go` | Entry point; calls `cmd.Execute` |
