@@ -24,7 +24,7 @@ func (m model) listHeight() int {
 func (m model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	v.WindowTitle = "branch-cleaner"
+	v.WindowTitle = "git-branch-cleaner"
 	return v
 }
 

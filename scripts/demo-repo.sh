@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates a throwaway git repo with a mix of branches to try branch-cleaner on.
+# Creates a throwaway git repo with a mix of branches to try git-branch-cleaner on.
 # Usage: scripts/demo-repo.sh [dir]   (default: /tmp/branch-cleaner-demo)
 set -euo pipefail
 
@@ -90,4 +90,4 @@ commit 3 "Try a sidebar layout for the new navigation menu" "Priya Natarajan"
 git switch -q main
 
 git fetch -q --prune
-echo "Demo repo ready: cd $repo && $root/branch-cleaner"
+echo "Demo repo ready: cd $repo && $root/git-branch-cleaner"

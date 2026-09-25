@@ -13,7 +13,7 @@ func main() {
 	olderThan := flag.Int("older-than", 0, "hide branches whose last commit is less than `N` days old")
 	base := flag.String("base", "", "compare against `branch` instead of detecting it\n(default: origin's default branch, then main, then master)")
 	flag.Usage = func() {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: branch-cleaner [flags]\n\n")
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: git-branch-cleaner [flags]\n\n")
 		fmt.Fprintf(flag.CommandLine.Output(), "Find and delete stale local git branches. Run it inside a git repository.\n\nFlags:\n")
 		flag.PrintDefaults()
 	}

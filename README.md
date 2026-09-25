@@ -1,4 +1,4 @@
-# branch-cleaner
+# git-branch-cleaner
 
 A terminal UI for finding and deleting stale local git branches, built with
 [Bubble Tea](https://github.com/charmbracelet/bubbletea),
@@ -25,29 +25,28 @@ space toggle • a select merged/gone • enter delete • / filter • ? more �
 
 ## Install
 
-From the repo root:
-
 ```sh
-go install .
+go install github.com/ronsj/git-branch-cleaner@latest
 ```
 
-This installs `branch-cleaner` into `$(go env GOPATH)/bin`, or into `$GOBIN`
-if you've set it. Add that directory
-to your `PATH` if it isn't already there. You can also build a binary in place
-with `go build -o branch-cleaner .`.
+Or, from a clone of this repo, `go install .`
+
+Either way, this installs `git-branch-cleaner` into `$(go env GOPATH)/bin`, or
+into `$GOBIN` if you've set it. Add that directory to your `PATH` if it isn't
+already there. You can also build a binary in place with `go build .`.
 
 ## Uninstall
 
 Delete the installed binary:
 
 ```sh
-rm "$(go env GOPATH)/bin/branch-cleaner"
+rm "$(go env GOPATH)/bin/git-branch-cleaner"
 ```
 
 If you've set `GOBIN`, `go install` put the binary there instead:
 
 ```sh
-rm "$(go env GOBIN)/branch-cleaner"
+rm "$(go env GOBIN)/git-branch-cleaner"
 ```
 
 If you created the [demo repo](#try-it-on-a-demo-repo), remove its folder:
@@ -62,8 +61,11 @@ Run it from anywhere inside a git repository:
 
 ```sh
 cd path/to/your/repo
-branch-cleaner
+git-branch-cleaner
 ```
+
+Git runs any `git-<name>` program on your `PATH` as a subcommand, so
+`git branch-cleaner` works too.
 
 Branches are listed oldest first, so the stalest ones are at the top; press
 `s` to switch to newest first or by name. Each row shows the branch's last
@@ -85,12 +87,12 @@ instead of deleting it.
 `--older-than` is handy for skipping work that's still in progress:
 
 ```sh
-branch-cleaner --older-than 30
+git-branch-cleaner --older-than 30
 ```
 
 The header shows how many branches it's hiding (for example
 `2 newer than 30 days hidden`). Flags can be combined, and
-`branch-cleaner -h` lists them all.
+`git-branch-cleaner -h` lists them all.
 
 ### Keys
 
@@ -147,7 +149,7 @@ Branches are deleted with `git branch -D`. If any selected branch isn't merged
 into the base branch, the confirmation screen warns you before anything is
 deleted.
 
-When you quit, branch-cleaner prints a restore command for each branch it
+When you quit, git-branch-cleaner prints a restore command for each branch it
 deleted:
 
 ```
@@ -160,13 +162,13 @@ Run the restore command to bring a branch back. If you've lost the output,
 
 ## Try it on a demo repo
 
-To try branch-cleaner without touching real work, use `--dry-run` or create
+To try git-branch-cleaner without touching real work, use `--dry-run` or create
 a throwaway repo with merged, gone, unmerged, and worktree branches:
 
 ```sh
-go build -o branch-cleaner .
+go build .
 scripts/demo-repo.sh                  # defaults to /tmp/branch-cleaner-demo
-cd /tmp/branch-cleaner-demo/repo && ~/path/to/branch-cleaner
+cd /tmp/branch-cleaner-demo/repo && ~/path/to/git-branch-cleaner
 ```
 
 The folder holds the repo (`repo/`), a fake remote (`remote.git/`), and a

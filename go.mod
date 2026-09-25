@@ -1,4 +1,4 @@
-module github.com/ronsj1/branch-cleaner
+module github.com/ronsj/git-branch-cleaner
 
 go 1.27.1
 
