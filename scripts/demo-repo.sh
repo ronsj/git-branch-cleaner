@@ -4,6 +4,10 @@
 set -euo pipefail
 
 dir="${1:-/tmp/branch-cleaner-demo}"
+# Make dir absolute with no trailing slash: the remote and worktree paths are
+# built as siblings of it and used after cd-ing into it.
+dir="${dir%/}"
+case "$dir" in /*) ;; *) dir="$PWD/$dir" ;; esac
 root="$(cd "$(dirname "$0")/.." && pwd)"
 rm -rf "$dir" "$dir-remote.git" "$dir-release"
 git init -q --bare "$dir-remote.git"
