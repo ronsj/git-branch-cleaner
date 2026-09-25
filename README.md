@@ -8,11 +8,16 @@ A terminal UI for finding and deleting stale local git branches, built with
 ```
 Git Branch Cleaner  base: main · oldest first
 
-  [x] chore/deps          3 weeks ago    merged        Alex Kim         Bump dependencies
-> [ ] experiment/new-nav  2 weeks ago                  Priya Natarajan  Try a sidebar layout for th…
-  [x] feature/login       6 days ago     merged        Alex Kim         Add login form with email v…
-  [x] fix/header-typo     2 days ago     gone          Sam Lee          Fix typo in header
-   -  main                5 minutes ago  current base  Ronald San Jose  Merge chore/deps
+  [x] chore/deps          merged
+      3 weeks ago    Alex Kim         Bump dependencies
+> [ ] experiment/new-nav
+      2 weeks ago    Priya Natarajan  Try a sidebar layout for the nav
+  [x] feature/login       merged
+      6 days ago     Alex Kim         Add login form with email validation
+  [x] fix/header-typo     gone
+      2 days ago     Sam Lee          Fix typo in header
+   -  main                current base
+      5 minutes ago  Ronald San Jose  Merge chore/deps
 
 3 selected
 space toggle • a select merged/gone • enter delete • / filter • ? more • q quit
@@ -70,9 +75,9 @@ Git runs any `git-<name>` program on your `PATH` as a subcommand, so
 doesn't install.
 
 Branches are listed oldest first, so the stalest ones are at the top; press
-`s` to switch to newest first or by name. Each row shows the branch's last
-commit: when it was made, who wrote it, and its message. Rows that don't fit
-your terminal are cut off with `…`.
+`s` to switch to newest first or by name. Under each branch's name and status
+is its last commit: when it was made, who wrote it, and its message. Lines
+that don't fit your terminal are cut off with `…`.
 
 ### Flags
 

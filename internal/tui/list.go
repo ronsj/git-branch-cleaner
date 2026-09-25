@@ -13,11 +13,19 @@ import (
 // maxAuthorWidth caps the author column so one long name can't crowd out subjects.
 const maxAuthorWidth = 20
 
+// linesPerBranch is how many screen lines each branch takes: its name and
+// status, then its last commit's age, author, and subject.
+const linesPerBranch = 2
+
+// detailIndent lines a branch's commit details up under its name, past the
+// cursor pointer and checkbox.
+const detailIndent = "      "
+
 // columnWidths are the widths of the columns whose contents only change when
 // the branches are loaded. Each column is sized to its widest value across
 // every branch, so the columns line up and don't shift as the filter changes.
 type columnWidths struct {
-	name, tags, author int
+	name, author int
 }
 
 // measureColumns measures every branch for columnWidths. That's the slowest
@@ -26,14 +34,13 @@ func (m Model) measureColumns() columnWidths {
 	var w columnWidths
 	for _, b := range m.branches {
 		w.name = max(w.name, lipgloss.Width(b.Name))
-		w.tags = max(w.tags, lipgloss.Width(m.renderTags(b)))
 		w.author = max(w.author, lipgloss.Width(b.Author))
 	}
 	w.author = min(w.author, maxAuthorWidth)
 	return w
 }
 
-// renderList draws rows of visible, starting at m.offset.
+// renderList draws rows branches of visible, starting at m.offset.
 func (m Model) renderList(visible []git.Branch, rows int) string {
 	// Ages are worked out on every render, so they stay current while the
 	// app is open. They're plain ASCII, so len is their width on screen.
@@ -73,16 +80,16 @@ func (m Model) renderList(visible []git.Branch, rows int) string {
 
 		author := ansi.Truncate(b.Author, w.author, "…")
 
-		row := fmt.Sprintf("%s%s %s  %s  %s  %s  %s",
-			pointer, check, name,
+		title := fmt.Sprintf("%s%s %s  %s", pointer, check, name, m.renderTags(b))
+		details := fmt.Sprintf("%s%s  %s  %s", detailIndent,
 			mutedStyle.Render(padRight(relativeTime(b.CommitTime, now), dateWidth)),
-			padRight(m.renderTags(b), w.tags),
 			mutedStyle.Render(padRight(author, w.author)),
 			b.Subject)
 
-		// Cut rows off at the terminal edge instead of letting them wrap.
-		row = m.fitWidth(row)
-		s.WriteString(strings.TrimRight(row, " ") + "\n")
+		// Cut lines off at the terminal edge instead of letting them wrap.
+		for _, line := range []string{title, details} {
+			s.WriteString(strings.TrimRight(m.fitWidth(line), " ") + "\n")
+		}
 	}
 
 	if rest := len(visible) - end; rest > 0 {

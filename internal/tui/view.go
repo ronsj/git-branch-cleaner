@@ -11,9 +11,9 @@ import (
 	"github.com/ronsj/git-branch-cleaner/internal/git"
 )
 
-// listHeight is how many branch rows fit on screen: the terminal height
-// minus the header, the footer (measured, not assumed), and the two
-// "↑/↓ N more" lines.
+// listHeight is how many branches fit on screen: the terminal height minus
+// the header, the footer (measured, not assumed), and the two "↑/↓ N more"
+// lines, divided by the lines each branch takes.
 func (m Model) listHeight() int {
 	visible := m.visibleBranches()
 	return m.rowsFor(len(visible), m.renderFooter(visible))
@@ -26,7 +26,8 @@ func (m Model) rowsFor(visible int, footer string) int {
 		return visible // size unknown yet: show everything
 	}
 	const headerLines, scrollMarkers = 2, 2
-	return max(m.height-headerLines-scrollMarkers-lipgloss.Height(footer), 3)
+	lines := m.height - headerLines - scrollMarkers - lipgloss.Height(footer)
+	return max(lines/linesPerBranch, 3)
 }
 
 func (m Model) View() tea.View {
