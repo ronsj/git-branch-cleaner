@@ -25,15 +25,5 @@ func branchesNamed(t *testing.T, names ...string) []Branch {
 
 func loadBranch(t *testing.T, name string) Branch {
 	t.Helper()
-	_, branches, err := LoadBranches("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, b := range branches {
-		if b.Name == name {
-			return b
-		}
-	}
-	t.Fatalf("branch %q not found", name)
-	return Branch{}
+	return branchesNamed(t, name)[0]
 }
